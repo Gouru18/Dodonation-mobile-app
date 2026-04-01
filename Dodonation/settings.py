@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'donor',
     'ngo',
     'core',
+    
+    'rest_framework',
 ]
 
 AUTH_USER_MODEL = 'users.User'

@@ -36,8 +36,10 @@ urlpatterns = [
     path("ngo/", include("ngo.urls")),
 
     # Core donation logic (listings, reviews, etc.)
-    path("donations/", include("core.urls")),
+    path("core/", include("core.urls")),
 
+    # API endpoints
+    path("api/", include("api.urls")),
 ]
 
 if settings.DEBUG:
