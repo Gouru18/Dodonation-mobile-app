@@ -11,6 +11,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Donation App',
       home: RoleSelectionScreen(),
+
+       routes: {
+        '/chatbot': (context) => ChatbotScreen(),
+        '/ngo_permit': (context) => NGOPermitScreen(),
+        // keep other existing routes if needed
+      },
     );
   }
 }
