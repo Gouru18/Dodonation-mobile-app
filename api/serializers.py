@@ -46,7 +46,15 @@ class NGOProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NGOProfile
-        fields = ['id', 'user_username', 'name', 'description', 'contact_email']
+        fields = [
+            'id',
+            'user_username',
+            'name',
+            'reg_number',
+            'permit_file',
+            'verification_status',
+            'verified_at'
+        ]
 
 class DonorProfileSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)

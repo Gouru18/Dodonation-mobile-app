@@ -7,4 +7,8 @@ urlpatterns = [
     path('account/', views.ngo_account_view, name='ngo_account'),
     path('account/edit/', views.ngo_edit_view, name='ngo_edit'),
     path('public/<int:ngo_Id>/', views.ngo_public_profile, name='ngo_public_profile'),
+
+    
+    path('api/ngo/upload-permit/', views.upload_permit, name='api-upload-permit'),
+    path('api/ngo/verification-status/', views.check_verification_status, name='api-verification-status'),
 ]
