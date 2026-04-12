@@ -1,5 +1,5 @@
 # Virtual environments
-backend/virtualenv/
+virtualenv/
 venv/
 env/
 
