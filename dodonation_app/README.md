@@ -1,17 +1,16 @@
-# dodonation_app
+# Dodonation Flet App
 
-A new Flutter project.
+This is the mobile app for Dodonation, built with Flet (Python framework for web, mobile, and desktop apps).
 
-## Getting Started
+## Features
+- Role selection (Donor, NGO)
+- Login and Register
+- NGO Permit Application
+- Chatbot interface
 
-This project is a starting point for a Flutter application.
+## Installation
+1. Install dependencies: `pip install -r requirements.txt`
+2. Run the app: `python main.py`
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Integration with Django Backend
+This app can connect to the Django API at the backend for authentication and data.
