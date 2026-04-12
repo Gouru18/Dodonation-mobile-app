@@ -22,8 +22,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
             f"Thank you,\nThe Dodonation Team"
         )
         
-        # 3. Send the email (For now, we'll pretend the user's email is their username + @test.com)
-        # Note to Person 1 & 2: Once the custom User model is done, change this to user.email
+        # 3. Send the email 
         recipient_list = [f"{meeting.donor.username}@test.com", f"{meeting.ngo.username}@test.com"]
         
         send_mail(

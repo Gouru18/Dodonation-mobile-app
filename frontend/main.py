@@ -11,7 +11,7 @@ def main(page: ft.Page):
 
     result_text = ft.Text(value="")
 
-    # --- 1. Map Setup (Bypassing OSM Block) ---
+    # --- 1. Map Setup  ---
     map_widget = fm.Map(
         expand=True,
         initial_center=fm.MapLatitudeLongitude(0, 0),
