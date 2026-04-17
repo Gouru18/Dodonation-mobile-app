@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/request-otp/', RequestOTPView.as_view(), name='request-otp'),
     path('api/auth/', include('accounts.urls')),
     path('api/profiles/', include('profiles.urls')),
+    path('api/chatbot/', include('chatbot.urls')),
 ]
 
 # That gives endpoints like:/api/auth/register/,/api/auth/login/,/api/auth/verify-otp/,/api/auth/token/refresh/,/api/profiles/donor/<id>/,/api/profiles/ngo/<id>/
