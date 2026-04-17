@@ -40,6 +40,8 @@ urlpatterns = [
 
     # API endpoints
     path("api/", include("api.urls")),
+
+    path('chatbot/', include('chatbot.urls')),
 ]
 
 if settings.DEBUG:

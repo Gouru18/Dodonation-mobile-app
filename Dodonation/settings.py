@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'donor',
     'ngo',
     'core',
+    'chatbot',
     
     'rest_framework',
 ]

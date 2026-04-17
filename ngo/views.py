@@ -6,6 +6,8 @@ from core.models import ClaimRequest
 from .models import NGOProfile
 from .forms import UserEditForm
 
+# ---------------- HTML Views (keep as-is) ----------------
+
 def ngo_signup_view(request):
     if request.method == 'POST':
         form = NGOSignupForm(request.POST)
@@ -49,12 +51,13 @@ def ngo_account_view(request):
         'stats': stats,
     })
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ba2288f07fd1c72cb48e45bf7bba52e8c09e18ee
 def ngo_public_profile(request, ngo_Id):
-    # Get the NGO object (Receiver)
-    ngo = get_object_or_404(NGOProfile, pk = ngo_Id)
-    
-    # Optional: show donations requested by this NGO
-    requests_made = ClaimRequest.objects.filter(receiver=ngo).select_related("donation")  # ClaimRequest has receiver foreign key
+    ngo = get_object_or_404(NGOProfile, pk=ngo_Id)
+    requests_made = ClaimRequest.objects.filter(receiver=ngo).select_related("donation")
     
     context = {
         'ngo': ngo,
@@ -62,9 +65,12 @@ def ngo_public_profile(request, ngo_Id):
     }
     return render(request, 'ngo/ngo_public_profile.html', context)
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ba2288f07fd1c72cb48e45bf7bba52e8c09e18ee
 @login_ngo
 def ngo_edit_view(request):
-    # Ensure user has an NGO profile
     if not hasattr(request.user, 'ngo_profile'):
         messages.error(request, "You must be an NGO to edit this page.")
         return redirect('ngo_account')
@@ -86,4 +92,40 @@ def ngo_edit_view(request):
     return render(request, 'ngo/ngo_edit.html', {
         'user_form': user_form,
         'profile_form': profile_form,
+<<<<<<< HEAD
     })
+=======
+    })
+
+# ---------------- API Views (for mobile app) ----------------
+from rest_framework import status, response
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from api.serializers import NGOProfileSerializer
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_permit(request):
+    """
+    Endpoint for NGO to upload permit file
+    """
+    ngo_profile = request.user.ngo_profile
+    file = request.FILES.get('permit_file')
+    if file:
+        ngo_profile.permit_file = file
+        ngo_profile.verification_status = 'pending'
+        ngo_profile.save()
+        serializer = NGOProfileSerializer(ngo_profile)
+        return response.Response(serializer.data, status=status.HTTP_200_OK)
+    return response.Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_verification_status(request):
+    """
+    Endpoint for NGO to check verification status
+    """
+    ngo_profile = request.user.ngo_profile
+    serializer = NGOProfileSerializer(ngo_profile)
+    return response.Response(serializer.data)
+>>>>>>> ba2288f07fd1c72cb48e45bf7bba52e8c09e18ee
