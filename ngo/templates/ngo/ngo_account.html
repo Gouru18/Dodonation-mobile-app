@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .ngo-dashboard {
+        max-width: 1000px;
+        margin: 2rem auto;
+        padding: 2rem;
+        background-color: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .ngo-dashboard h2 {
+        color: var(--dark-green);
+        margin-bottom: 1rem;
+    }
+
+    .profile-summary {
+        background: var(--cream);
+        padding: 1.2rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+    }
+
+    .profile-summary p {
+        margin: 0.4rem 0;
+        font-size: 1rem;
+    }
+
+    .profile-summary .button {
+        margin-top: 1rem;
+        background-color: var(--medium-green);
+        color: white;
+        font-weight: bold;
+        padding: 0.6rem 1.2rem;
+        border-radius: 6px;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .profile-summary .button:hover {
+        background-color: var(--dark-green);
+    }
+
+    .section-block {
+        margin-top: 2rem;
+    }
+
+    .section-block h3 {
+        color: var(--medium-green);
+        margin-bottom: 1rem;
+    }
+
+    ul {
+        list-style: none;
+        padding-left: 0;
+    }
+
+    ul li {
+        background: #f9f9f9;
+        margin-bottom: 0.8rem;
+        padding: 1rem;
+        border-radius: 6px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+
+    ul li strong {
+        color: var(--dark-green);
+    }
+
+    .stats-card {
+        margin-top: 2rem;
+        background: var(--light-green);
+        padding: 1.5rem;
+        border-radius: 8px;
+        color: var(--dark-green);
+        font-weight: bold;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .browse-btn {
+        margin-top: 2rem;
+        display: inline-block;
+        background-color: var(--dark-green);
+        color: white;
+        padding: 0.8rem 1.5rem;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: bold;
+        transition: background 0.2s;
+    }
+
+    .browse-btn:hover {
+        background-color: var(--medium-green);
+    }
+</style>
+
+<div class="ngo-dashboard">
+    <h2>Welcome, {{ receiver.name }}</h2>
+
+    <div class="profile-summary">
+        <p><strong>Email:</strong> {{ user.email }}</p>
+        <p><strong>Phone:</strong> {{ user.phone_no }}</p>
+        <p><strong>Registration No:</strong> {{ receiver.reg_number }}</p>
+        <a href="{% url 'ngo_edit' %}" class="btn btn-success">Edit Profile</a>
+    </div>
+
+    <div class="section-block">
+        <h3>Requests Sent</h3>
+        <ul>
+            {% for request in requests %}
+                <li>
+                    <strong>{{ request.donation.title }}</strong> — Status: {{ request.status }}
+                    {% if request.status == 'accepted' %}
+                        <p>Donor: {{ request.donation.donor.user.username }} | Contact: {{ request.donation.donor.user.phone_no }}</p>
+                    {% endif %}
+                </li>
+            {% empty %}
+                <li>No requests sent yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="section-block">
+        <h3>Claimed Donations</h3>
+        <ul>
+            {% for donation in claimed %}
+                <li>{{ donation.donation.title }} — {{ donation.status }}</li>
+            {% empty %}
+                <li>No claimed donations yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="section-block stats-card">
+        <h3>Activity Summary</h3>
+        <p>Total Requests: {{ stats.total_requests }}</p>
+        <p>Total Donations Received: {{ stats.total_claimed }}</p>
+        <p>Success Rate: {{ stats.success_rate }}%</p>
+    </div>
+    
+    <div class="section-block"><a href="{% url 'donation_list' %}" class="btn btn-success">Browse Available Donations</a></div>
+    
+</div>
+
+{% endblock %}
