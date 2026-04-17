@@ -134,12 +134,3 @@ def create_report(request, format=None):
         serializer.save()
         return response.Response(serializer.data, status=201)
     return response.Response(serializer.errors, status=400)
-
-
-
-
-
-
-
-
-

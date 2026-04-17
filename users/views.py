@@ -37,13 +37,9 @@ def login_view(request):
 
     return render(request, 'users/login.html', {'form': form})
 
-
-
 def logout_view(request):
     logout(request)
     return redirect('homepage')
-
-
 
 def select_role_view(request):
     if request.method == 'POST':
@@ -68,9 +64,3 @@ def homepage(request):
         'recent_donations': recent_donations
     }
     return render(request, 'homepage.html', context)
-
-
-
-
-
-

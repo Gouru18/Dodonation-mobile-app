@@ -39,7 +39,6 @@ class DonorProfileForm(forms.ModelForm):
         model = DonorProfile
         fields = []
 
-
 class DonationPostForm(forms.ModelForm):
     class Meta:
         model = Donation
@@ -53,12 +52,10 @@ class ProblemReportForm(forms.ModelForm):
         model = Report
         fields = ['name', 'email', 'message']
 
-
 class DonorProfileForm(forms.ModelForm):
     class Meta:
         model = DonorProfile
         fields = []
-
 
 class DonorSignupForm(forms.ModelForm):
     password = forms.CharField(widget=forms.PasswordInput, min_length=8)

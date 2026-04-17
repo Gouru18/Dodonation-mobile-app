@@ -6,13 +6,12 @@ from users.models import User
 from ngo.models import NGOProfile
 from donor.models import DonorProfile
 
-# --- Custom Admin Site Settings ---
+# Custom Admin Site Settings 
 admin.site.site_header = "DoDonation Administration"
 admin.site.site_title = "DoDonation Admin"
 admin.site.index_title = "Welcome to DoDonation Admin Panel"
 
-# ---------------------- DONATION ADMIN ----------------------
-
+# DONATION ADMIN 
 @admin.register(Donation)
 class DonationAdmin(admin.ModelAdmin):
     list_display = ('title', 'donor_name', 'category', 'status', 'expiry_date', 'created_date')
@@ -42,8 +41,7 @@ class DonationAdmin(admin.ModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
-# ---------------------- CLAIM REQUEST ADMIN ----------------------
-
+# CLAIM REQUEST ADMIN 
 @admin.register(ClaimRequest)
 class ClaimRequestAdmin(admin.ModelAdmin):
     list_display = ('donation', 'receiver', 'status', 'date_requested')
@@ -76,7 +74,7 @@ class ClaimRequestAdmin(admin.ModelAdmin):
     delete_requests.short_description = 'Delete selected claim requests'
 
 
-# ---------------------- GENERAL REVIEW ADMIN ----------------------
+#  GENERAL REVIEW ADMIN 
 @admin.register(GeneralReview)
 class GeneralReviewAdmin(admin.ModelAdmin):
     list_display = ('review_author', 'email', 'created_at')
@@ -96,7 +94,7 @@ class GeneralReviewAdmin(admin.ModelAdmin):
         self.message_user(request, f'Deleted {count} review(s).')
 
 
-# ---------------------- REPORT ADMIN ----------------------
+#  REPORT ADMIN 
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
     list_display = ('report_author', 'email', 'message', 'created_at')
@@ -115,7 +113,6 @@ class ReportAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False
  
-
 @admin.register(User)
 class CustomUserAdmin(BaseUserAdmin):
     list_display = ('username', 'email', 'phone_no', 'role', 'is_active', 'account_status_badge')
@@ -168,13 +165,12 @@ class CustomUserAdmin(BaseUserAdmin):
         return readonly
 
 
-# --- Profile inlines so admin can create profile data when creating a user ---
+#Profile inlines so admin can create profile data when creating a user
 class DonorProfileInline(admin.StackedInline):
     model = DonorProfile
     can_delete = False
     verbose_name_plural = 'Donor profile'
     fk_name = 'user'
-
 
 class NGOProfileInline(admin.StackedInline):
     model = NGOProfile
@@ -183,15 +179,5 @@ class NGOProfileInline(admin.StackedInline):
     fk_name = 'user'
     fields = ('name', 'reg_number')
 
-
 # attach both inlines to the User admin; admin can fill NGO fields at user creation
 CustomUserAdmin.inlines = (DonorProfileInline, NGOProfileInline)
-
-
-
-
-
-
-
-
-

@@ -48,9 +48,7 @@ class NGOProfileForm(forms.ModelForm):
             raise forms.ValidationError('An NGO with this registration number already exists.')
         return reg
 
-
 class UserEditForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['username', 'email', 'phone_no']
-        

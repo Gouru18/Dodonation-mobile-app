@@ -3,7 +3,6 @@ from django import forms
 from users.models import User
 from .models import NGOProfile
 
-
 class NGOProfileCreationForm(forms.ModelForm):
     username = forms.CharField(max_length=150, required=True)
     email = forms.EmailField(required=True)
@@ -56,7 +55,6 @@ class NGOProfileCreationForm(forms.ModelForm):
             profile.save()
         return profile
 
-
 @admin.register(NGOProfile)
 class NGOAdmin(admin.ModelAdmin):
     list_display = ('user_username', 'name', 'user_email', 'reg_number', 'user_is_active', 'user_date_joined')
@@ -86,7 +84,7 @@ class NGOAdmin(admin.ModelAdmin):
         return obj.user.date_joined
     user_date_joined.short_description = 'Joined'
 
-    # --- Admin actions ---
+    # Admin actions
     def approve_and_activate_ngo(self, request, queryset):
         """Validate, confirm and activate the related user account for selected NGOs."""
         count = 0

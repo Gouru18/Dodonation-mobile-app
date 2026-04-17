@@ -8,7 +8,6 @@ from donor.models import DonorProfile
 from donor.forms import DonorProfileForm, DonorSignupForm, DonorUserEditForm
 from django.contrib.auth import update_session_auth_hash
 
-
 def donor_signup_view(request):
     if request.method == 'POST':
         user_form = DonorSignupForm(request.POST)
@@ -32,7 +31,6 @@ def donor_signup_view(request):
         'user_form': user_form,
         'profile_form': profile_form
     })
-
 
 @login_donor
 def donor_profile(request):
@@ -89,7 +87,6 @@ def donor_profile(request):
         },
     )
 
-
 @login_donor
 def edit_donation(request, donation_id):
     donor_profile = getattr(request.user, 'donor_profile', None)
@@ -103,7 +100,6 @@ def edit_donation(request, donation_id):
     else:
         form = DonationForm(instance=donation)
     return render(request, 'core/edit_donation.html', {'form': form})
-
 
 @login_donor
 def delete_donation(request, donation_id):
@@ -141,7 +137,6 @@ def donation_requests(request):
         return redirect('donation_requests')
 
     return render(request, 'donor/donation_requests.html', {'requests': requests})
-
 
 def donor_public_profile(request, donor_id):
     donor_profile = get_object_or_404(DonorProfile, pk=donor_id)

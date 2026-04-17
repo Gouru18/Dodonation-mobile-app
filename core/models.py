@@ -80,7 +80,6 @@ class GeneralReview(models.Model):
     def __str__(self):
         return f"Review by {self.user.username if self.user else self.name}"
 
-
 class Report(models.Model):
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     name = models.CharField(max_length=100)

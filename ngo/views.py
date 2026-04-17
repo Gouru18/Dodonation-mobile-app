@@ -31,7 +31,6 @@ def ngo_signup_view(request):
 def ngo_pending_view(request):
     return render(request, 'ngo/ngo_pending.html')
 
-
 @login_ngo
 def ngo_account_view(request):
     ngo_profile = request.user.ngo_profile
@@ -50,8 +49,6 @@ def ngo_account_view(request):
         'stats': stats,
     })
 
-
-
 def ngo_public_profile(request, ngo_Id):
     # Get the NGO object (Receiver)
     ngo = get_object_or_404(NGOProfile, pk = ngo_Id)
@@ -64,8 +61,6 @@ def ngo_public_profile(request, ngo_Id):
         'requests_made': requests_made,
     }
     return render(request, 'ngo/ngo_public_profile.html', context)
-
-
 
 @login_ngo
 def ngo_edit_view(request):
@@ -92,4 +87,3 @@ def ngo_edit_view(request):
         'user_form': user_form,
         'profile_form': profile_form,
     })
-

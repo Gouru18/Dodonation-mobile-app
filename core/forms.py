@@ -39,8 +39,6 @@ class ReportForm(forms.ModelForm):
             raise ValidationError("Message cannot be empty.")
         return message
 
-
-
 class DonationForm(forms.ModelForm):
     class Meta:
         model = Donation
