@@ -3,7 +3,6 @@ from utils.constants import PRIMARY_GREEN, BUTTON_TEXT, INPUT_TEXT
 from utils.helpers import show_message
 import requests
 
-
 def map_view(page: ft.Page):
     location_text = ft.Text("Location unknown", size=16)
     lat = ft.TextField(label="Latitude", width=180, read_only=True, color=INPUT_TEXT)
@@ -23,6 +22,9 @@ def map_view(page: ft.Page):
             location_text.value = f"Error: {ex}"
         page.update()
 
+    async def go_back(e):
+        await page.push_route("/dashboard")
+
     return ft.View(
         route="/map",
         appbar=ft.AppBar(title=ft.Text("Donation App - Map")),
@@ -34,8 +36,8 @@ def map_view(page: ft.Page):
                     [
                         location_text,
                         ft.Row([lat, lon], alignment=ft.MainAxisAlignment.CENTER),
-                        ft.ElevatedButton("Get Location", on_click=get_location, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-                        ft.ElevatedButton("Back", on_click=lambda e: page.go("/dashboard"), bgcolor="#444", color=BUTTON_TEXT),
+                        ft.Button("Get Location", on_click=get_location, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
+                        ft.Button("Back", on_click=go_back, bgcolor="#444", color=BUTTON_TEXT),
                     ],
                     spacing=15,
                 ),

@@ -3,7 +3,6 @@ from services.chatbot_service import ChatbotService
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
 from utils.helpers import show_message
 
-
 def chatbot_view(page: ft.Page):
     chat_history = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
     message_input = ft.TextField(label="Message", expand=True, color=INPUT_TEXT)
@@ -25,6 +24,9 @@ def chatbot_view(page: ft.Page):
             chat_history.controls.append(ft.Text(f"Bot error: {ex}", color="red"))
         page.update()
 
+    async def go_back(e):
+        await page.push_route("/dashboard")
+
     return ft.View(
         route="/chatbot",
         appbar=ft.AppBar(title=ft.Text("Donation App - Chatbot")),
@@ -35,8 +37,8 @@ def chatbot_view(page: ft.Page):
                 content=ft.Column(
                     [
                         chat_history,
-                        ft.Row([message_input, ft.ElevatedButton("Send", on_click=send_message, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT)], alignment=ft.MainAxisAlignment.CENTER),
-                        ft.ElevatedButton("Back", on_click=lambda e: page.go("/dashboard"), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
+                        ft.Row([message_input, ft.Button("Send", on_click=send_message, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT)], alignment=ft.MainAxisAlignment.CENTER),
+                        ft.Button("Back", on_click=go_back, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
                     ],
                     spacing=15,
                 ),
