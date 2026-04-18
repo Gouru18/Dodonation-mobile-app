@@ -1,7 +1,7 @@
 # pylint: disable=E1121, E1123
 import flet as ft
-from archive.dodonation_app.helpers import clear_page, form_container
-from archive.dodonation_app.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
+from mobile_app.utils.helpers import clear_page, form_container
+from mobile_app.utils.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
 
 def role_selection_screen(page, set_role, go_to_register, go_back):
     clear_page(page)

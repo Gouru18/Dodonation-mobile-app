@@ -1,8 +1,10 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import ChatbotFAQ
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def chatbot_api(request):
     user_message = request.data.get("message", "").strip().lower()
 
@@ -25,6 +27,6 @@ def chatbot_api(request):
     if best_match and highest_score > 0:
         answer = best_match.answer
     else:
-        answer = "Sorry, I don't understand that question. Please try another one."
+        answer = "Sorry, I don't understand that question. Please try another one. You can ask about donations, meetings, permits, or other donation-related topics."
 
     return Response({"answer": answer})

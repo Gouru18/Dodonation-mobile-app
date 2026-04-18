@@ -1,7 +1,7 @@
 # pylint: disable=E1121, E1123
 import flet as ft
-from archive.dodonation_app.helpers import clear_page
-from archive.dodonation_app.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
+from mobile_app.utils.helpers import clear_page
+from mobile_app.utils.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
 
 def dashboard_screen(page, logout, go_to_chatbot=None):
     clear_page(page)

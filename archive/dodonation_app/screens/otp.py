@@ -1,8 +1,8 @@
 # pylint: disable=E1121, E1123
 import flet as ft
-from archive.dodonation_app.auth_api import verify_otp
-from archive.dodonation_app.helpers import show_message, clear_page
-from archive.dodonation_app.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
+from mobile_app.services.auth_service import verify_otp
+from mobile_app.utils.helpers import show_message, clear_page
+from mobile_app.utils.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
 
 
 def otp_screen(page, email, go_to_login):

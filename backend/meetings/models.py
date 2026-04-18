@@ -1,23 +1,30 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-from donations.models import Donation # Importing the model we just made
+from donations.models import ClaimRequest
 
 User = get_user_model()
 
 class Meeting(models.Model):
-   
-    donation = models.ForeignKey(Donation, on_delete=models.CASCADE, related_name='meetings')
-    
-    # For now, we use default Django User model. 
-    # If Person 1 makes a custom User model later, they will update these foreign keys.
-    donor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='donor_meetings')
-    ngo = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ngo_meetings')
-    
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    )
+
+    claim_request = models.OneToOneField(ClaimRequest, on_delete=models.CASCADE, related_name='meeting')
     scheduled_time = models.DateTimeField()
     meeting_link = models.URLField(max_length=500, blank=True, null=True)
-    is_accepted = models.BooleanField(default=False)
-    
+    meeting_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    meeting_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    meeting_address = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-scheduled_time']
 
     def __str__(self):
-        return f"Meeting at {self.scheduled_time}"
+        donation_title = self.claim_request.donation.title
+        return f"{donation_title} meeting on {self.scheduled_time:%Y-%m-%d %H:%M}"

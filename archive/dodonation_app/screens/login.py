@@ -1,8 +1,8 @@
 # pylint: disable=E1121, E1123
 import flet as ft
-from archive.dodonation_app.helpers import form_container, show_message, clear_page
-from archive.dodonation_app.auth_api import login_user
-from archive.dodonation_app.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
+from mobile_app.utils.helpers import form_container, show_message, clear_page
+from mobile_app.services.auth_service import login_user
+from mobile_app.utils.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
 
 
 def login_screen(page, go_to_register, go_to_dashboard):
