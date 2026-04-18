@@ -44,12 +44,16 @@ def donations_view(page: ft.Page):
             controls.append(ft.Text(f"Coordinates: {item.get('latitude')}, {item.get('longitude')}"))
         else:
             message_field = ft.TextField(label="Claim message", multiline=True, min_lines=2, color=INPUT_TEXT)
+
+            def handle_claim_click(e, donation_id=item["id"], field=message_field):
+                page.run_task(claim_donation, donation_id, field)
+
             controls.extend(
                 [
                     message_field,
                     ft.Button(
                         "Claim Donation",
-                        on_click=lambda e, donation_id=item["id"], field=message_field: claim_donation(donation_id, field),
+                        on_click=handle_claim_click,
                         bgcolor=SECONDARY_GREEN,
                         color=BUTTON_TEXT,
                     ),

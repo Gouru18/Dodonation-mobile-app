@@ -12,6 +12,22 @@ def permits_view(page: ft.Page):
     permit_status = ft.Text("")
     permit_list = ft.Column(spacing=10)
 
+    def display_status(value):
+        return PermitService.display_status(value)
+
+    def latest_status_label(permit):
+        if not permit:
+            return "unknown"
+        if permit.get("reviewed_at") or permit.get("status") in {"approved", "rejected"}:
+            return "Reviewed"
+        return display_status(permit.get("status", "unknown")).capitalize()
+
+    def sort_key(permit):
+        return (
+            permit.get("reviewed_at") or "",
+            permit.get("submitted_at") or "",
+        )
+
     def load_permits():
         response = PermitService.get_my_permit()
         permit_list.controls.clear()
@@ -25,14 +41,15 @@ def permits_view(page: ft.Page):
         if not permits:
             permit_status.value = "No permit uploaded yet."
         else:
+            permits = sorted(permits, key=sort_key, reverse=True)
             latest = permits[0]
-            permit_status.value = f"Latest status: {latest.get('status', 'unknown')}"
+            permit_status.value = f"Latest status: {latest_status_label(latest)}"
             for permit in permits:
                 permit_list.controls.append(
                     ft.Container(
                         content=ft.Column(
                             [
-                                ft.Text(f"Status: {permit.get('status', 'unknown')}", weight=ft.FontWeight.BOLD),
+                                ft.Text(f"Status: {display_status(permit.get('status', 'unknown'))}", weight=ft.FontWeight.BOLD),
                                 ft.Text(f"Submitted: {permit.get('submitted_at', '')}"),
                                 ft.Text(f"Rejection reason: {permit.get('rejection_reason') or 'None'}"),
                             ],

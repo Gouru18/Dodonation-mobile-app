@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.utils import timezone
 
 from .serializers import RegisterDonorSerializer, RegisterNGOSerializer, LoginSerializer, UserSerializer
@@ -15,16 +16,63 @@ from core.email_utils import send_otp_email
 User = get_user_model()
 
 
+def _flatten_serializer_errors(errors):
+    """Convert DRF serializer errors into a short readable message."""
+    if isinstance(errors, list):
+        return " ".join(str(item) for item in errors)
+    if isinstance(errors, dict):
+        parts = []
+        for field, value in errors.items():
+            label = "Error" if field == "non_field_errors" else field.replace("_", " ").capitalize()
+            parts.append(f"{label}: {_flatten_serializer_errors(value)}")
+        return " | ".join(parts)
+    return str(errors)
+
+
+def _friendly_integrity_error_message(exc):
+    message = str(exc).lower()
+    if 'accounts_user.username' in message:
+        return 'A user with this username already exists.'
+    if 'accounts_user.email' in message:
+        return 'A user with this email already exists.'
+    return 'Could not complete registration because this account already exists.'
+
+
 class RegisterDonorView(generics.CreateAPIView):
     serializer_class = RegisterDonorSerializer
     permission_classes = [AllowAny]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        if response.status_code == 201:
-            response.data['message'] = 'Donor registered successfully. OTP sent to email.'
-        return response
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    'message': _flatten_serializer_errors(serializer.errors),
+                    'errors': serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            self.perform_create(serializer)
+        except IntegrityError as exc:
+            return Response(
+                {
+                    'message': _friendly_integrity_error_message(exc),
+                    'errors': {'detail': [_friendly_integrity_error_message(exc)]},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {
+                'message': 'Donor registered successfully. OTP sent to email.',
+                'user': serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
 class RegisterNGOView(generics.CreateAPIView):
@@ -33,10 +81,35 @@ class RegisterNGOView(generics.CreateAPIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        if response.status_code == 201:
-            response.data['message'] = 'NGO registered successfully. OTP sent to email. Awaiting admin verification.'
-        return response
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    'message': _flatten_serializer_errors(serializer.errors),
+                    'errors': serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            self.perform_create(serializer)
+        except IntegrityError as exc:
+            return Response(
+                {
+                    'message': _friendly_integrity_error_message(exc),
+                    'errors': {'detail': [_friendly_integrity_error_message(exc)]},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {
+                'message': 'NGO registered successfully. OTP sent to email. Awaiting admin verification.',
+                'user': serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
 class LoginView(APIView):
@@ -44,12 +117,20 @@ class LoginView(APIView):
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    'message': _flatten_serializer_errors(serializer.errors),
+                    'errors': serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user = serializer.validated_data['user']
         refresh = RefreshToken.for_user(user)
 
         return Response({
+            'message': 'Login successful.',
             'refresh': str(refresh),
             'access': str(refresh.access_token),
             'user': UserSerializer(user).data,

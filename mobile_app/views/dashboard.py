@@ -2,10 +2,14 @@ import flet as ft
 from services.auth_service import AuthService
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
 from utils.helpers import build_appbar, page_container, section_card
+from views.admin_panel import admin_panel_view
 
 def dashboard_view(page: ft.Page):
     user = AuthService.user or {}
     role = user.get("role", "")
+
+    if role == "admin" or user.get("is_staff") or user.get("is_superuser"):
+        return admin_panel_view(page)
 
     async def open_donations(e):
         await page.push_route("/donations")

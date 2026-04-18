@@ -54,11 +54,11 @@ class NGOPermitListView(generics.ListAPIView):
         user = self.request.user
         if user.is_staff:
             # Admin sees all pending permits
-            return NGOPermitApplication.objects.filter(status='pending')
+            return NGOPermitApplication.objects.filter(status='pending').order_by('-submitted_at')
         else:
             # NGO sees their own permit
             try:
-                return NGOPermitApplication.objects.filter(ngo=user.ngo_profile)
+                return NGOPermitApplication.objects.filter(ngo=user.ngo_profile).order_by('-submitted_at')
             except:
                 return NGOPermitApplication.objects.none()
 

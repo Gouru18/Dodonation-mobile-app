@@ -8,8 +8,12 @@ from utils.helpers import auth_scaffold, form_container, show_message
 
 def _format_error_message(error_data):
     if isinstance(error_data, dict):
+        if error_data.get("message"):
+            return str(error_data["message"])
         parts = []
         for key, value in error_data.items():
+            if key == "errors":
+                continue
             if isinstance(value, list):
                 parts.append(f"{key}: {', '.join(str(item) for item in value)}")
             else:

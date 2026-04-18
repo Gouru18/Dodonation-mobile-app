@@ -11,6 +11,8 @@ def login_view(page: ft.Page):
 
     def _extract_error_message(error_data):
         if isinstance(error_data, dict):
+            if "message" in error_data:
+                return str(error_data["message"])
             if "detail" in error_data:
                 return str(error_data["detail"])
             if "non_field_errors" in error_data and error_data["non_field_errors"]:
@@ -33,7 +35,11 @@ def login_view(page: ft.Page):
                 AuthService.set_token(data.get("access"))
                 AuthService.set_user(data.get("user", {}))
                 show_message(page, "Login successful", "green")
-                await page.push_route("/dashboard")
+                user = data.get("user", {}) or {}
+                if user.get("role") == "admin" or user.get("is_staff") or user.get("is_superuser"):
+                    await page.push_route("/admin-panel")
+                else:
+                    await page.push_route("/dashboard")
             else:
                 try:
                     error_data = response.json()

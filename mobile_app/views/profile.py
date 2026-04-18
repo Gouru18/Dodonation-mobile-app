@@ -2,6 +2,7 @@ import flet as ft
 
 from services.auth_service import AuthService
 from services.profile_service import ProfileService
+from services.permit_service import PermitService
 from utils.constants import PRIMARY_GREEN, BUTTON_TEXT, INPUT_TEXT
 from utils.helpers import build_appbar, centered_content, page_container, section_card, show_message
 
@@ -30,7 +31,7 @@ def profile_view(page: ft.Page):
             registration_number.value = data.get("registration_number", "")
             permit = data.get("permit_application")
             if permit:
-                info_text.value = f"Permit status: {permit.get('status', 'unknown')}"
+                info_text.value = f"Permit status: {PermitService.display_status(permit.get('status', 'unknown'))}"
             else:
                 info_text.value = "Permit not uploaded yet."
         address.value = data.get("address", "")

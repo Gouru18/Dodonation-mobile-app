@@ -5,6 +5,14 @@ from services.auth_service import AuthService
 
 class PermitService:
     @staticmethod
+    def display_status(status):
+        if not status:
+            return "unknown"
+        return {
+            "approved": "accepted",
+        }.get(status, status)
+
+    @staticmethod
     def upload_permit(permit_file_path):
         """Upload NGO permit file"""
         with open(permit_file_path, 'rb') as f:
@@ -64,5 +72,5 @@ class PermitService:
         if response.status_code == 200:
             permits = response.json()
             if permits:
-                return permits[0].get('status', 'none')
+                return PermitService.display_status(permits[0].get('status', 'none'))
         return 'none'

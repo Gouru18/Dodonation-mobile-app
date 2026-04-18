@@ -11,6 +11,7 @@ from views.claims import claims_view
 from views.profile import profile_view
 from views.permits import permits_view
 from views.meetings import meetings_view
+from views.admin_panel import admin_panel_view
 
 def main(page: ft.Page):
     page.title = "Dodonation"
@@ -49,6 +50,8 @@ def main(page: ft.Page):
             page.views.append(chatbot_view(page))
         elif page.route == "/map":
             page.views.append(map_view(page))
+        elif page.route == "/admin-panel":
+            page.views.append(admin_panel_view(page))
         else:
             page.views.append(
                 ft.View(

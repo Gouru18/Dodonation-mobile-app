@@ -8,6 +8,20 @@ class DonationAdmin(admin.ModelAdmin):
     list_filter = ['status', 'category', 'created_at']
     search_fields = ['title', 'donor__email']
     readonly_fields = ['created_at', 'updated_at']
+    fields = [
+        'donor',
+        'title',
+        'description',
+        'category',
+        'quantity',
+        'expiry_date',
+        'latitude',
+        'longitude',
+        'status',
+        'image',
+        'created_at',
+        'updated_at',
+    ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'donor':
@@ -27,6 +41,9 @@ class ClaimRequestAdmin(admin.ModelAdmin):
     list_filter = ['status', 'date_requested']
     search_fields = ['donation__title', 'receiver__email']
     readonly_fields = ['date_requested', 'date_responded']
+
+    def has_add_permission(self, request):
+        return False
     
     def donation_title(self, obj):
         return obj.donation.title
