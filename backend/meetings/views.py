@@ -6,6 +6,7 @@ from django.db.models import Q
 
 from .models import Meeting
 from .serializers import MeetingSerializer
+from .google_meet import GoogleMeetError, create_google_meet_space
 from donations.models import ClaimRequest
 
 
@@ -26,7 +27,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
         return queryset
 
     def create(self, request, *args, **kwargs):
-        """Create a meeting for an accepted claim"""
+        """Donor schedules an online Google Meet after accepting a claim."""
         claim_id = request.data.get('claim_request')
         
         try:
@@ -37,71 +38,163 @@ class MeetingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Only donor or NGO of the claim can create meeting
-        if request.user not in [claim.donation.donor, claim.receiver]:
+        if request.user != claim.donation.donor:
             return Response(
-                {'error': 'You are not involved in this claim'},
+                {'error': 'Only the donor can schedule the Google Meet.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Check if meeting already exists for this claim
         if Meeting.objects.filter(claim_request=claim).exists():
             return Response(
                 {'error': 'Meeting already exists for this claim'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        serializer = self.get_serializer(data=request.data, context={'claim_request': claim})
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        scheduled_time = request.data.get('scheduled_time')
+        if not scheduled_time:
+            return Response(
+                {'error': 'scheduled_time is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        serializer = self.get_serializer(
+            data={'scheduled_time': scheduled_time},
+            context={'claim_request': claim}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            meet_space = create_google_meet_space()
+        except GoogleMeetError as exc:
+            return Response(
+                {'error': f'Google Meet scheduling failed: {exc}'},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+        except Exception:
+            return Response(
+                {'error': 'Google Meet is not configured. Set Google application credentials for the backend.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        meeting = serializer.save(
+            meeting_link=meet_space.get('meeting_uri'),
+            google_meet_space_name=meet_space.get('space_name'),
+            status='online_scheduled',
+        )
+
+        return Response(self.get_serializer(meeting).data, status=status.HTTP_201_CREATED)
 
     def perform_update(self, serializer):
         meeting = self.get_object()
-        # Only involved parties can update meeting
-        if self.request.user not in [
-            meeting.claim_request.donation.donor,
-            meeting.claim_request.receiver
-        ]:
-            raise permissions.PermissionDenied("You are not involved in this meeting")
+        if self.request.user != meeting.claim_request.donation.donor:
+            raise permissions.PermissionDenied("Only the donor can update this meeting")
+        if meeting.status != 'online_scheduled':
+            raise permissions.PermissionDenied("Meeting can only be updated before the online meeting is completed")
         serializer.save()
 
     @action(detail=True, methods=['post'])
-    def confirm(self, request, pk=None):
-        """Confirm meeting"""
+    def complete_online(self, request, pk=None):
+        """Mark the online Google Meet as completed."""
         meeting = self.get_object()
-        
-        if request.user not in [
-            meeting.claim_request.donation.donor,
-            meeting.claim_request.receiver
-        ]:
+
+        if request.user != meeting.claim_request.donation.donor:
             return Response(
-                {'error': 'You are not involved in this meeting'},
+                {'error': 'Only the donor can mark the online meeting as completed'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        meeting.status = 'confirmed'
-        meeting.save()
+        if meeting.status != 'online_scheduled':
+            return Response(
+                {'error': 'Online meeting is not awaiting completion'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        meeting.status = 'online_completed'
+        meeting.online_meeting_completed_at = timezone.now()
+        meeting.save(update_fields=['status', 'online_meeting_completed_at', 'updated_at'])
 
         serializer = self.get_serializer(meeting)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
-    def complete(self, request, pk=None):
-        """Mark meeting as completed"""
+    def pin_location(self, request, pk=None):
+        """Pin the physical meeting point after the online meeting is completed."""
         meeting = self.get_object()
-        
+
         if request.user != meeting.claim_request.donation.donor:
             return Response(
-                {'error': 'Only donor can mark meeting as completed'},
+                {'error': 'Only the donor can pin the meeting point'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        meeting.status = 'completed'
-        meeting.save()
+        if meeting.status != 'online_completed':
+            return Response(
+                {'error': 'Complete the online meeting before pinning the physical meeting point'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # Update donation status
+        latitude = request.data.get('meeting_latitude')
+        longitude = request.data.get('meeting_longitude')
+        address = request.data.get('meeting_address')
+
+        if latitude in (None, '') or longitude in (None, ''):
+            return Response(
+                {'error': 'meeting_latitude and meeting_longitude are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        meeting.meeting_latitude = latitude
+        meeting.meeting_longitude = longitude
+        meeting.meeting_address = address
+        meeting.location_pinned_at = timezone.now()
+        meeting.status = 'location_pinned'
+        meeting.save(
+            update_fields=[
+                'meeting_latitude',
+                'meeting_longitude',
+                'meeting_address',
+                'location_pinned_at',
+                'status',
+                'updated_at',
+            ]
+        )
+
+        serializer = self.get_serializer(meeting)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def complete_physical(self, request, pk=None):
+        """Mark the physical handoff as completed and clear the map point."""
+        meeting = self.get_object()
+
+        if request.user != meeting.claim_request.donation.donor:
+            return Response(
+                {'error': 'Only the donor can mark the physical meeting as completed'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if meeting.status != 'location_pinned':
+            return Response(
+                {'error': 'Pin the meeting point before completing the physical handoff'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        meeting.status = 'physical_completed'
+        meeting.physical_meeting_completed_at = timezone.now()
+        meeting.meeting_latitude = None
+        meeting.meeting_longitude = None
+        meeting.meeting_address = None
+        meeting.save(
+            update_fields=[
+                'status',
+                'physical_meeting_completed_at',
+                'meeting_latitude',
+                'meeting_longitude',
+                'meeting_address',
+                'updated_at',
+            ]
+        )
+
         meeting.claim_request.donation.status = 'completed'
         meeting.claim_request.donation.save()
 

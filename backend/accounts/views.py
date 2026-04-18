@@ -1,5 +1,6 @@
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +18,7 @@ User = get_user_model()
 class RegisterDonorView(generics.CreateAPIView):
     serializer_class = RegisterDonorSerializer
     permission_classes = [AllowAny]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
@@ -28,6 +30,7 @@ class RegisterDonorView(generics.CreateAPIView):
 class RegisterNGOView(generics.CreateAPIView):
     serializer_class = RegisterNGOSerializer
     permission_classes = [AllowAny]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
@@ -66,9 +69,8 @@ class VerifyOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
+        user = User.objects.filter(email__iexact=email).order_by('-id').first()
+        if not user:
             return Response(
                 {'error': 'User not found'},
                 status=status.HTTP_404_NOT_FOUND
@@ -109,9 +111,15 @@ class VerifyOTPView(APIView):
         user.is_email_verified = True
         user.save()
 
+        if not user.is_active:
+            return Response({
+                'message': 'OTP verified successfully. Your account is pending admin approval.',
+                'requires_admin_approval': True,
+                'user': UserSerializer(user).data,
+            }, status=status.HTTP_200_OK)
+
         # Generate tokens
         refresh = RefreshToken.for_user(user)
-
         return Response({
             'message': 'OTP verified successfully',
             'refresh': str(refresh),
@@ -132,9 +140,8 @@ class RequestOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
+        user = User.objects.filter(email__iexact=email).order_by('-id').first()
+        if not user:
             # Don't reveal if user exists or not for security
             return Response(
                 {'message': 'If user exists, OTP will be sent to their email'},

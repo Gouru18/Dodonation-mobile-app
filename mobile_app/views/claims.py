@@ -3,7 +3,7 @@ import flet as ft
 from services.auth_service import AuthService
 from services.claim_service import ClaimService
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
-from utils.helpers import show_message
+from utils.helpers import build_appbar, page_container, section_card, show_message
 
 
 def claims_view(page: ft.Page):
@@ -59,12 +59,7 @@ def claims_view(page: ft.Page):
                     )
 
                 claims_column.controls.append(
-                    ft.Container(
-                        content=ft.Column(controls, spacing=8),
-                        padding=15,
-                        border=ft.border.all(1, "#d9d9d9"),
-                        border_radius=12,
-                    )
+                    section_card("Claim Details", controls)
                 )
         page.update()
 
@@ -91,27 +86,32 @@ def claims_view(page: ft.Page):
 
     return ft.View(
         route="/claims",
-        appbar=ft.AppBar(title=ft.Text("Claim Requests")),
+        appbar=build_appbar("Claim Requests", go_back),
         controls=[
-            ft.Container(
-                expand=True,
-                padding=20,
-                content=ft.Column(
+            page_container(
+                section_card(
+                    "Filters",
                     [
                         ft.Row(
                             [
                                 ft.Button("All", on_click=lambda e: refresh_claims(), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
                                 ft.Button("Received", on_click=lambda e: refresh_claims("received"), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
                                 ft.Button("Sent", on_click=lambda e: refresh_claims("sent"), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
+                            ]
+                            if is_donor
+                            else [
+                                ft.Button("Sent Claims", on_click=lambda e: refresh_claims("sent"), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
                             ],
                             wrap=True,
+                            spacing=12,
                         ),
-                        claims_column,
-                        ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT),
                     ],
-                    spacing=15,
-                    expand=True,
                 ),
-            )
+                claims_column,
+                ft.Row(
+                    [ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT, width=140)],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
+            ),
         ],
     )

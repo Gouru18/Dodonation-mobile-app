@@ -3,7 +3,7 @@ import flet as ft
 from services.auth_service import AuthService
 from services.profile_service import ProfileService
 from utils.constants import PRIMARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import show_message
+from utils.helpers import build_appbar, centered_content, page_container, section_card, show_message
 
 
 def profile_view(page: ft.Page):
@@ -65,19 +65,30 @@ def profile_view(page: ft.Page):
     controls.extend(
         [
             address,
-            ft.Button("Save Profile", on_click=save_profile, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-            ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT),
+            ft.Row(
+                [
+                    ft.Button("Save Profile", on_click=save_profile, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=160),
+                    ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT, width=140),
+                ],
+                spacing=12,
+                wrap=True,
+            ),
         ]
     )
 
     return ft.View(
         route="/profile",
-        appbar=ft.AppBar(title=ft.Text("My Profile")),
+        appbar=build_appbar("My Profile", go_back),
         controls=[
-            ft.Container(
-                expand=True,
-                padding=20,
-                content=ft.Column(controls, spacing=15),
+            page_container(
+                centered_content(
+                    section_card(
+                        "Profile Details",
+                        controls,
+                        subtitle="Keep your contact details and pickup information up to date.",
+                    ),
+                    max_width=760,
+                )
             )
         ],
     )

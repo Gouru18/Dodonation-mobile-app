@@ -7,11 +7,12 @@ class AuthService:
     user = None
 
     @staticmethod
-    def register_donor(email, password, full_name, phone=''):
+    def register_donor(username, email, password, full_name, phone=''):
         """Register as a donor"""
         return requests.post(
             f"{BASE_URL}/auth/register/donor/",
             json={
+                "username": username,
                 "email": email,
                 "password": password,
                 "full_name": full_name,
@@ -21,27 +22,31 @@ class AuthService:
         )
 
     @staticmethod
-    def register_ngo(email, password, organization_name, phone='', registration_number=''):
+    def register_ngo(username, email, password, organization_name, permit_file_path, phone='', registration_number=''):
         """Register as an NGO"""
-        return requests.post(
-            f"{BASE_URL}/auth/register/ngo/",
-            json={
-                "email": email,
-                "password": password,
-                "organization_name": organization_name,
-                "phone": phone,
-                "registration_number": registration_number
-            },
-            timeout=10
-        )
+        data = {
+            "username": username,
+            "email": email,
+            "password": password,
+            "organization_name": organization_name,
+            "phone": phone,
+            "registration_number": registration_number,
+        }
+        with open(permit_file_path, 'rb') as permit_file:
+            return requests.post(
+                f"{BASE_URL}/auth/register/ngo/",
+                data=data,
+                files={"permit_file": permit_file},
+                timeout=20
+            )
 
     @staticmethod
-    def login(email, password):
-        """Login with email and password"""
+    def login(identifier, password):
+        """Login with username or email and password"""
         return requests.post(
             f"{BASE_URL}/auth/login/",
             json={
-                "email": email,
+                "identifier": identifier,
                 "password": password
             },
             timeout=10

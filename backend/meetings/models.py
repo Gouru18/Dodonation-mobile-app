@@ -6,19 +6,24 @@ User = get_user_model()
 
 class Meeting(models.Model):
     STATUS_CHOICES = (
-        ('pending', 'Pending'),
-        ('confirmed', 'Confirmed'),
-        ('completed', 'Completed'),
+        ('online_scheduled', 'Online Meeting Scheduled'),
+        ('online_completed', 'Online Meeting Completed'),
+        ('location_pinned', 'Physical Meeting Point Pinned'),
+        ('physical_completed', 'Physical Meeting Completed'),
         ('cancelled', 'Cancelled'),
     )
 
     claim_request = models.OneToOneField(ClaimRequest, on_delete=models.CASCADE, related_name='meeting')
     scheduled_time = models.DateTimeField()
     meeting_link = models.URLField(max_length=500, blank=True, null=True)
+    google_meet_space_name = models.CharField(max_length=255, blank=True, null=True)
     meeting_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     meeting_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     meeting_address = models.CharField(max_length=255, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='online_scheduled')
+    online_meeting_completed_at = models.DateTimeField(null=True, blank=True)
+    location_pinned_at = models.DateTimeField(null=True, blank=True)
+    physical_meeting_completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

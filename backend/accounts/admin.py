@@ -4,11 +4,22 @@ from .models import User, OTPCode
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
+    actions = ['activate_accounts', 'suspend_accounts']
     fieldsets = BaseUserAdmin.fieldsets + (
         ('Custom Fields', {'fields': ('role', 'phone', 'is_phone_verified', 'is_email_verified')}),
     )
     list_display = ['username', 'email', 'role', 'is_active']
     list_filter = ['role', 'is_active', 'is_email_verified']
+
+    @admin.action(description="Activate selected accounts")
+    def activate_accounts(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f"{updated} account(s) activated.")
+
+    @admin.action(description="Suspend selected accounts")
+    def suspend_accounts(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f"{updated} account(s) suspended.")
 
 
 @admin.register(OTPCode)

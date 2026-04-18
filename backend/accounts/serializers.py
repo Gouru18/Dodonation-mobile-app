@@ -1,26 +1,40 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 import random
-from profiles.models import DonorProfile, NGOProfile
+from profiles.models import DonorProfile, NGOProfile, NGOPermitApplication
 from accounts.models import OTPCode
 
 User = get_user_model()
 
 class RegisterDonorSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(max_length=150)
     password = serializers.CharField(write_only=True, min_length=8)
-    full_name = serializers.CharField(max_length=255)
+    full_name = serializers.CharField(max_length=255, write_only=True)
 
     class Meta:
         model = User
-        fields = ['email', 'password', 'full_name', 'phone']
+        fields = ['username', 'email', 'password', 'full_name', 'phone']
+
+    def validate_email(self, value):
+        existing_user = User.objects.filter(email__iexact=value).order_by('-id').first()
+        if existing_user:
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_username(self, value):
+        existing_user = User.objects.filter(username__iexact=value).order_by('-id').first()
+        if existing_user:
+            raise serializers.ValidationError("A user with this username already exists.")
+        return value
 
     def create(self, validated_data):
         full_name = validated_data.pop('full_name')
         
         user = User.objects.create_user(
-            username=validated_data['email'],
+            username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
             role='donor',
@@ -53,20 +67,39 @@ class RegisterDonorSerializer(serializers.ModelSerializer):
 
 
 class RegisterNGOSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(max_length=150)
     password = serializers.CharField(write_only=True, min_length=8)
-    organization_name = serializers.CharField(max_length=255)
-    registration_number = serializers.CharField(required=False, allow_blank=True)
+    organization_name = serializers.CharField(max_length=255, write_only=True)
+    registration_number = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    permit_file = serializers.FileField(write_only=True)
 
     class Meta:
         model = User
-        fields = ['email', 'password', 'organization_name', 'registration_number', 'phone']
+        fields = ['username', 'email', 'password', 'organization_name', 'registration_number', 'phone', 'permit_file']
+
+    def validate_email(self, value):
+        existing_user = User.objects.filter(email__iexact=value).order_by('-id').first()
+        if existing_user:
+            if existing_user.role == 'ngo' and not existing_user.is_active:
+                raise serializers.ValidationError("This NGO account is pending admin approval. Please wait until it is activated.")
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_username(self, value):
+        existing_user = User.objects.filter(username__iexact=value).order_by('-id').first()
+        if existing_user:
+            if existing_user.role == 'ngo' and not existing_user.is_active:
+                raise serializers.ValidationError("This NGO account is pending admin approval. Please wait until it is activated.")
+            raise serializers.ValidationError("A user with this username already exists.")
+        return value
 
     def create(self, validated_data):
         organization_name = validated_data.pop('organization_name')
         registration_number = validated_data.pop('registration_number', '')
+        permit_file = validated_data.pop('permit_file')
         
         user = User.objects.create_user(
-            username=validated_data['email'],
+            username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
             role='ngo',
@@ -74,10 +107,16 @@ class RegisterNGOSerializer(serializers.ModelSerializer):
             is_active=False  # NGO must be verified by admin
         )
 
-        NGOProfile.objects.create(
+        ngo_profile = NGOProfile.objects.create(
             user=user,
             organization_name=organization_name,
             registration_number=registration_number
+        )
+
+        NGOPermitApplication.objects.create(
+            ngo=ngo_profile,
+            permit_file=permit_file,
+            status='pending',
         )
         
         # Send OTP
@@ -103,21 +142,23 @@ class RegisterNGOSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    identifier = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        email = data.get('email')
+        identifier = data.get('identifier', '').strip()
         password = data.get('password')
-        
-        try:
-            user = User.objects.get(email=email)
-            if not user.check_password(password):
-                raise serializers.ValidationError("Invalid credentials")
-            if not user.is_active:
-                raise serializers.ValidationError("User is not active. Please wait for admin verification.")
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid credentials")
+
+        user = User.objects.filter(
+            Q(username__iexact=identifier) | Q(email__iexact=identifier)
+        ).order_by('-id').first()
+
+        if not user:
+            raise serializers.ValidationError("User not found.")
+        if not user.check_password(password):
+            raise serializers.ValidationError("Incorrect password.")
+        if not user.is_active:
+            raise serializers.ValidationError("User is not active. Please wait for admin verification.")
         
         data['user'] = user
         return data

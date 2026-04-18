@@ -1,13 +1,20 @@
+import asyncio
 import flet as ft
 from services.auth_service import AuthService
 from utils.app_state import AppState
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import form_container, show_message
+from utils.helpers import auth_scaffold, form_container, show_message
 
 
 def otp_view(page: ft.Page):
     """OTP verification screen"""
-    email = ft.TextField(label="Email", value=AppState.pending_otp_email, color=INPUT_TEXT, prefix_icon=ft.Icons.EMAIL)
+    email = ft.TextField(
+        label="Email",
+        value=AppState.pending_otp_email,
+        color=INPUT_TEXT,
+        prefix_icon=ft.Icons.EMAIL,
+        read_only=True,
+    )
     otp_code = ft.TextField(label="OTP Code", color=INPUT_TEXT, prefix_icon=ft.Icons.CONFIRMATION_NUM)
 
     async def verify_otp(e):
@@ -16,13 +23,18 @@ def otp_view(page: ft.Page):
                 show_message(page, "Please enter email and OTP code", "red")
                 return
             
-            response = AuthService.verify_otp(email.value, otp_code.value)
+            response = await asyncio.to_thread(AuthService.verify_otp, email.value, otp_code.value)
             if response.status_code == 200:
                 data = response.json()
-                AuthService.set_token(data.get("access"))
-                AuthService.set_user(data.get("user", {}))
-                show_message(page, "OTP verified successfully!", "green")
-                await page.push_route("/dashboard")
+                if data.get("requires_admin_approval"):
+                    AuthService.logout()
+                    show_message(page, data.get("message", "Account pending admin approval."), "green")
+                    await page.push_route("/")
+                else:
+                    AuthService.set_user(data.get("user", {}))
+                    AuthService.set_token(data.get("access"))
+                    show_message(page, "OTP verified successfully!", "green")
+                    await page.push_route("/dashboard")
             else:
                 error_data = response.json()
                 error_msg = error_data.get('error', 'Invalid OTP')
@@ -36,7 +48,7 @@ def otp_view(page: ft.Page):
                 show_message(page, "Please enter your email", "red")
                 return
             
-            response = AuthService.request_otp(email.value)
+            response = await asyncio.to_thread(AuthService.request_otp, email.value)
             if response.status_code == 200:
                 show_message(page, "New OTP sent to your email", "green")
             else:
@@ -48,7 +60,7 @@ def otp_view(page: ft.Page):
         await page.push_route("/")
 
     card = form_container("Verify OTP", [
-        ft.Text("Enter the OTP code sent to your email:", size=14),
+        ft.Text("Enter the OTP sent to your registered email address.", size=14, color="#4B5563"),
         email,
         otp_code,
         ft.Button(
@@ -72,19 +84,4 @@ def otp_view(page: ft.Page):
         ),
     ])
 
-    return ft.View(
-        route="/otp",
-        appbar=ft.AppBar(title=ft.Text("Donation App - OTP Verification")),
-        controls=[
-            ft.Container(
-                expand=True,
-                padding=20,
-                alignment=ft.Alignment.CENTER,
-                content=ft.Column(
-                    [card],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-            )
-        ],
-    )
+    return auth_scaffold(page, "/otp", "OTP Verification", card)

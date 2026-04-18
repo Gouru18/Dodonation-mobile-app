@@ -1,20 +1,33 @@
+import asyncio
 import flet as ft
 from services.auth_service import AuthService
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import form_container, show_message
+from utils.helpers import auth_scaffold, form_container, show_message
 
 
 def login_view(page: ft.Page):
-    email = ft.TextField(label="Email", color=INPUT_TEXT, prefix_icon=ft.Icons.EMAIL)
+    identifier = ft.TextField(label="Username or Email", color=INPUT_TEXT, prefix_icon=ft.Icons.PERSON)
     password = ft.TextField(label="Password", color=INPUT_TEXT, password=True, prefix_icon=ft.Icons.LOCK)
+
+    def _extract_error_message(error_data):
+        if isinstance(error_data, dict):
+            if "detail" in error_data:
+                return str(error_data["detail"])
+            if "non_field_errors" in error_data and error_data["non_field_errors"]:
+                return str(error_data["non_field_errors"][0])
+            return " | ".join(
+                f"{key}: {', '.join(value) if isinstance(value, list) else value}"
+                for key, value in error_data.items()
+            )
+        return str(error_data)
 
     async def login(e):
         try:
-            if not email.value or not password.value:
-                show_message(page, "Please enter email and password", "red")
+            if not identifier.value or not password.value:
+                show_message(page, "Please enter your username/email and password", "red")
                 return
             
-            response = AuthService.login(email.value, password.value)
+            response = await asyncio.to_thread(AuthService.login, identifier.value, password.value)
             if response.status_code == 200:
                 data = response.json()
                 AuthService.set_token(data.get("access"))
@@ -22,8 +35,11 @@ def login_view(page: ft.Page):
                 show_message(page, "Login successful", "green")
                 await page.push_route("/dashboard")
             else:
-                error_data = response.json()
-                error_msg = error_data.get('detail', 'Invalid credentials')
+                try:
+                    error_data = response.json()
+                except ValueError:
+                    error_data = {"detail": response.text}
+                error_msg = _extract_error_message(error_data) or 'Invalid credentials'
                 show_message(page, error_msg, "red")
         except Exception as ex:
             show_message(page, f"Error: {str(ex)}", "red")
@@ -32,7 +48,8 @@ def login_view(page: ft.Page):
         await page.push_route("/role-selection")
 
     card = form_container("Login", [
-        email,
+        ft.Text("Welcome back. Sign in to manage donations, claims, and meetings.", size=14, color="#4B5563"),
+        identifier,
         password,
         ft.Button(
             "Login",
@@ -60,20 +77,5 @@ def login_view(page: ft.Page):
             spacing=6,
         )
     ])
-    
-    return ft.View(
-        route="/",
-        appbar=ft.AppBar(title=ft.Text("Donation App - Login")),
-        controls=[
-            ft.Container(
-                expand=True,
-                padding=20,
-                alignment=ft.Alignment.CENTER,
-                content=ft.Column(
-                    [card],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-            )
-        ],
-    )
+
+    return auth_scaffold(page, "/", "Dodonation Login", card)

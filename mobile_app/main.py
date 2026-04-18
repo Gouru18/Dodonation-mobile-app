@@ -13,10 +13,11 @@ from views.permits import permits_view
 from views.meetings import meetings_view
 
 def main(page: ft.Page):
-    page.title = "Donation App"
+    page.title = "Dodonation"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.window_width = 400
     page.window_height = 700
+    page.bgcolor = "#F4F7F1"
 
     def build_views():
         page.views.clear()

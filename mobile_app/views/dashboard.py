@@ -1,6 +1,7 @@
 import flet as ft
 from services.auth_service import AuthService
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
+from utils.helpers import build_appbar, page_container, section_card
 
 def dashboard_view(page: ft.Page):
     user = AuthService.user or {}
@@ -32,36 +33,47 @@ def dashboard_view(page: ft.Page):
         await page.push_route("/")
 
     action_buttons = [
-        ft.Button("My Profile", on_click=open_profile, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-        ft.Button("Donations", on_click=open_donations, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-        ft.Button("Claims", on_click=open_claims, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-        ft.Button("Meetings", on_click=open_meetings, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
+        ft.Button("My Profile", on_click=open_profile, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
+        ft.Button("Donations", on_click=open_donations, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT, width=180),
+        ft.Button("Claims", on_click=open_claims, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
+        ft.Button("Meetings", on_click=open_meetings, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT, width=180),
     ]
 
     if role == "ngo":
-        action_buttons.append(ft.Button("Permit", on_click=open_permits, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT))
+        action_buttons.append(ft.Button("Permit", on_click=open_permits, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180))
 
     return ft.View(
         route="/dashboard",
-        appbar=ft.AppBar(title=ft.Text("Donation App - Dashboard")),
+        appbar=build_appbar("Dashboard"),
         controls=[
-            ft.Container(
-                expand=True,
-                padding=20,
-                content=ft.Column(
+            page_container(
+                section_card(
+                    "Welcome to Dodonation",
                     [
-                        ft.Text("Welcome to DoDonation", size=26, weight=ft.FontWeight.BOLD),
-                        ft.Text(user.get("email", ""), size=14),
-                        ft.Text(f"Role: {role or 'unknown'}", size=14),
-                        *action_buttons,
-                        ft.Button("Open Chatbot", on_click=open_chatbot, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-                        ft.Button("View Map", on_click=view_map, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-                        ft.Button("Logout", on_click=logout, bgcolor="#666", color=BUTTON_TEXT),
+                        ft.Text(user.get("username", "") or user.get("email", ""), size=16),
+                        ft.Text(f"Role: {role or 'unknown'}", size=14, color="#4B5563"),
                     ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=20,
+                    subtitle="Manage your donations, claims, meetings, and support tools from one place.",
                 ),
-            )
+                section_card(
+                    "Quick Actions",
+                    [
+                        ft.Row(action_buttons[:2], wrap=True, spacing=12),
+                        ft.Row(action_buttons[2:], wrap=True, spacing=12),
+                        ft.Row(
+                            [
+                                ft.Button("Open Chatbot", on_click=open_chatbot, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT, width=180),
+                                ft.Button("Meeting Map", on_click=view_map, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
+                            ],
+                            wrap=True,
+                            spacing=12,
+                        ),
+                    ],
+                ),
+                ft.Row(
+                    [ft.Button("Logout", on_click=logout, bgcolor="#666666", color=BUTTON_TEXT, width=160)],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
+            ),
         ],
     )

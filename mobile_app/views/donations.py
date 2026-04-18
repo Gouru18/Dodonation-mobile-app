@@ -1,9 +1,10 @@
+import asyncio
 import flet as ft
 
 from services.auth_service import AuthService
 from services.donation_service import DonationService
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import show_message
+from utils.helpers import build_appbar, page_container, section_card, show_message
 
 
 CATEGORY_OPTIONS = [
@@ -26,10 +27,8 @@ def donations_view(page: ft.Page):
     category = ft.Dropdown(label="Category", options=CATEGORY_OPTIONS, value="other")
     quantity = ft.TextField(label="Quantity", value="1", color=INPUT_TEXT)
     expiry_date = ft.TextField(label="Expiry Date (YYYY-MM-DD)", color=INPUT_TEXT)
-    latitude = ft.TextField(label="Latitude", color=INPUT_TEXT)
-    longitude = ft.TextField(label="Longitude", color=INPUT_TEXT)
-    image_path = ft.TextField(label="Image Path (optional)", color=INPUT_TEXT)
-    claim_message = ft.TextField(label="Claim message", multiline=True, min_lines=2, color=INPUT_TEXT)
+    selected_image = ft.Text("No image selected", color="#6B7280")
+    selected_image_path = {"value": None}
 
     def donation_card(item):
         donor_data = item.get("donor") or {}
@@ -60,12 +59,15 @@ def donations_view(page: ft.Page):
         return ft.Container(
             content=ft.Column(controls, spacing=8),
             padding=15,
-            border=ft.border.all(1, "#d9d9d9"),
+            border=ft.Border.all(1, "#d9d9d9"),
             border_radius=12,
+            bgcolor="#FFFEFB",
         )
 
-    def load_donations():
-        response = DonationService.get_my_donations() if is_donor else DonationService.get_donations()
+    async def load_donations():
+        response = await asyncio.to_thread(
+            DonationService.get_my_donations if is_donor else DonationService.get_donations
+        )
         donations_column.controls.clear()
 
         if response.status_code != 200:
@@ -81,17 +83,48 @@ def donations_view(page: ft.Page):
                 donations_column.controls.append(donation_card(item))
         page.update()
 
-    def create_donation(e):
+    async def pick_image(e):
+        def choose_file():
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                file_path = filedialog.askopenfilename(
+                    title="Choose donation image",
+                    filetypes=[
+                        ("Image files", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
+                        ("All files", "*.*"),
+                    ],
+                )
+                root.destroy()
+                return file_path
+            except Exception:
+                return None
+
+        file_path = await asyncio.to_thread(choose_file)
+        if file_path:
+            import os
+            selected_image_path["value"] = file_path
+            selected_image.value = os.path.basename(file_path)
+        else:
+            selected_image.value = "No image selected"
+        page.update()
+
+    async def create_donation(e):
         try:
-            response = DonationService.create_donation(
+            response = await asyncio.to_thread(
+                DonationService.create_donation,
                 title=title.value,
                 description=description.value,
                 category=category.value,
                 quantity=int(quantity.value or "1"),
                 expiry_date=expiry_date.value or None,
-                latitude=latitude.value or None,
-                longitude=longitude.value or None,
-                image=image_path.value or None,
+                latitude=None,
+                longitude=None,
+                image=selected_image_path["value"],
             )
         except ValueError:
             show_message(page, "Quantity must be a number.", "red")
@@ -106,19 +139,18 @@ def donations_view(page: ft.Page):
             description.value = ""
             quantity.value = "1"
             expiry_date.value = ""
-            latitude.value = ""
-            longitude.value = ""
-            image_path.value = ""
-            load_donations()
+            selected_image_path["value"] = None
+            selected_image.value = "No image selected"
+            await load_donations()
         else:
             show_message(page, f"Could not create donation: {response.text}", "red")
 
-    def claim_donation(donation_id, message_field):
-        response = DonationService.claim_donation(donation_id, message_field.value or "")
+    async def claim_donation(donation_id, message_field):
+        response = await asyncio.to_thread(DonationService.claim_donation, donation_id, message_field.value or "")
         if response.status_code in (200, 201):
             show_message(page, "Claim request sent.", "green")
             message_field.value = ""
-            load_donations()
+            await load_donations()
         else:
             show_message(page, f"Could not claim donation: {response.text}", "red")
 
@@ -128,44 +160,54 @@ def donations_view(page: ft.Page):
     create_controls = []
     if is_donor:
         create_controls = [
-            ft.Text("Create Donation", size=20, weight=ft.FontWeight.BOLD),
-            title,
-            description,
-            category,
-            quantity,
-            expiry_date,
-            latitude,
-            longitude,
-            image_path,
-            ft.Button("Create", on_click=create_donation, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-            ft.Divider(),
+            section_card(
+                "Create Donation",
+                [
+                    title,
+                    description,
+                    category,
+                    quantity,
+                    expiry_date,
+                    ft.Row(
+                        [
+                            ft.Button("Upload Image", on_click=pick_image, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
+                            selected_image,
+                        ],
+                        wrap=True,
+                        spacing=12,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Button("Create Donation", on_click=create_donation, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
+                ],
+                subtitle="Add the item details and optionally attach an image from your device.",
+            ),
         ]
 
-    load_donations()
+    page.run_task(load_donations)
 
     return ft.View(
         route="/donations",
-        appbar=ft.AppBar(title=ft.Text("Donations")),
+        appbar=build_appbar("Donations", go_back),
         controls=[
-            ft.Container(
-                expand=True,
-                padding=20,
-                content=ft.Column(
-                    create_controls
-                    + [
+            page_container(
+                *create_controls,
+                section_card(
+                    "Donation Feed",
+                    [
                         ft.Row(
                             [
-                                ft.Text("Donation Feed", size=20, weight=ft.FontWeight.BOLD),
-                                ft.Button("Refresh", on_click=lambda e: load_donations(), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
+                                ft.Text("Browse current donations", color="#4B5563"),
+                                ft.Button("Refresh", on_click=lambda e: page.run_task(load_donations), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                         donations_column,
-                        ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT),
                     ],
-                    spacing=15,
-                    expand=True,
                 ),
-            )
+                ft.Row(
+                    [ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT, width=140)],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
+            ),
         ],
     )

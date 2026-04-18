@@ -1,12 +1,14 @@
+import asyncio
 import flet as ft
 
 from services.permit_service import PermitService
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import show_message
+from utils.helpers import build_appbar, centered_content, page_container, section_card, show_message
 
 
 def permits_view(page: ft.Page):
-    permit_path = ft.TextField(label="Permit File Path", color=INPUT_TEXT)
+    permit_path = {"value": None}
+    permit_file_label = ft.Text("No permit selected", color="#6B7280")
     permit_status = ft.Text("")
     permit_list = ft.Column(spacing=10)
 
@@ -37,21 +39,54 @@ def permits_view(page: ft.Page):
                             spacing=6,
                         ),
                         padding=12,
-                        border=ft.border.all(1, "#d9d9d9"),
+                        border=ft.Border.all(1, "#d9d9d9"),
                         border_radius=12,
+                        bgcolor="#FFFEFB",
                     )
                 )
         page.update()
 
-    def upload_permit(e):
-        if not permit_path.value:
-            show_message(page, "Enter the local file path to the permit first.", "red")
+    async def choose_permit(e):
+        def choose_file():
+            try:
+                import os
+                import tkinter as tk
+                from tkinter import filedialog
+
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                file_path = filedialog.askopenfilename(
+                    title="Choose NGO permit file",
+                    filetypes=[
+                        ("Documents", "*.pdf *.png *.jpg *.jpeg"),
+                        ("All files", "*.*"),
+                    ],
+                )
+                root.destroy()
+                return file_path
+            except Exception:
+                return None
+
+        file_path = await asyncio.to_thread(choose_file)
+        if file_path:
+            import os
+            permit_path["value"] = file_path
+            permit_file_label.value = os.path.basename(file_path)
+        else:
+            permit_file_label.value = "No permit selected"
+        page.update()
+
+    async def upload_permit(e):
+        if not permit_path["value"]:
+            show_message(page, "Choose a permit file first.", "red")
             return
 
-        response = PermitService.upload_permit(permit_path.value)
+        response = await asyncio.to_thread(PermitService.upload_permit, permit_path["value"])
         if response.status_code in (200, 201):
             show_message(page, "Permit uploaded.", "green")
-            permit_path.value = ""
+            permit_path["value"] = None
+            permit_file_label.value = "No permit selected"
             load_permits()
         else:
             show_message(page, f"Could not upload permit: {response.text}", "red")
@@ -63,27 +98,40 @@ def permits_view(page: ft.Page):
 
     return ft.View(
         route="/permits",
-        appbar=ft.AppBar(title=ft.Text("NGO Permit")),
+        appbar=build_appbar("NGO Permit", go_back),
         controls=[
-            ft.Container(
-                expand=True,
-                padding=20,
-                content=ft.Column(
-                    [
-                        permit_status,
-                        permit_path,
-                        ft.Row(
-                            [
-                                ft.Button("Upload Permit", on_click=upload_permit, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-                                ft.Button("Refresh", on_click=lambda e: load_permits(), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-                            ]
-                        ),
-                        permit_list,
-                        ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT),
-                    ],
-                    spacing=15,
-                    expand=True,
+            page_container(
+                centered_content(
+                    section_card(
+                        "Permit Status",
+                        [
+                            permit_status,
+                            ft.Row(
+                                [
+                                    ft.Button("Choose Permit", on_click=choose_permit, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
+                                    permit_file_label,
+                                ],
+                                wrap=True,
+                                spacing=12,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Row(
+                                [
+                                    ft.Button("Upload Permit", on_click=upload_permit, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
+                                    ft.Button("Refresh", on_click=lambda e: load_permits(), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
+                                ],
+                                wrap=True,
+                                spacing=12,
+                            ),
+                        ],
+                        subtitle="Upload the registration permit that admins will review before activating the NGO account.",
+                    ),
+                    section_card("Previous Submissions", [permit_list]),
+                    ft.Row(
+                        [ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT, width=140)],
+                        alignment=ft.MainAxisAlignment.END,
+                    ),
                 ),
-            )
+            ),
         ],
     )
