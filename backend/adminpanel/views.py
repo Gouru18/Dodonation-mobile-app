@@ -5,13 +5,11 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from accounts.models import User, OTPCode
-from chatbot.models import ChatbotFAQ
 from donations.models import Donation, ClaimRequest
 from meetings.models import Meeting
 from profiles.models import DonorProfile, NGOProfile, NGOPermitApplication
 
 from .serializers import (
-    AdminChatbotFAQSerializer,
     AdminClaimRequestSerializer,
     AdminDonationSerializer,
     AdminDonorProfileSerializer,
@@ -59,7 +57,6 @@ class AdminDashboardViewSet(AdminOnlyMixin, viewsets.ViewSet):
                     'total': Meeting.objects.count(),
                     'active': Meeting.objects.exclude(status='physical_completed').exclude(status='cancelled').count(),
                 },
-                'faqs': ChatbotFAQ.objects.count(),
                 'otp_codes': OTPCode.objects.count(),
             }
         )
@@ -221,6 +218,13 @@ class AdminClaimRequestViewSet(AdminOnlyMixin, viewsets.ModelViewSet):
             instance.donation.status = 'claimed'
             instance.donation.save(update_fields=['status'])
 
+    def destroy(self, request, *args, **kwargs):
+        claim_id = kwargs.get(self.lookup_field or 'pk')
+        deleted_count, _ = ClaimRequest.objects.filter(pk=claim_id).delete()
+        if deleted_count:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({'detail': 'Claim request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
 
 class AdminMeetingViewSet(AdminOnlyMixin, viewsets.ModelViewSet):
     serializer_class = AdminMeetingSerializer
@@ -239,15 +243,3 @@ class AdminMeetingViewSet(AdminOnlyMixin, viewsets.ModelViewSet):
         if status_value:
             queryset = queryset.filter(status=status_value)
         return queryset.order_by('-scheduled_time')
-
-
-class AdminChatbotFAQViewSet(AdminOnlyMixin, viewsets.ModelViewSet):
-    serializer_class = AdminChatbotFAQSerializer
-    queryset = ChatbotFAQ.objects.all()
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        q = self.request.query_params.get('q')
-        if q:
-            queryset = queryset.filter(question__icontains=q)
-        return queryset.order_by('question')

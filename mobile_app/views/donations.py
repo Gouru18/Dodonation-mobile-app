@@ -1,10 +1,24 @@
 import asyncio
+import os
+from urllib.parse import urljoin, urlparse
 import flet as ft
 
 from services.auth_service import AuthService
 from services.donation_service import DonationService
-from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import build_appbar, page_container, section_card, show_message
+from utils.config import BASE_URL
+from utils.helpers import (
+    build_appbar,
+    page_container,
+    centered_content,
+    section_card,
+    auth_input,
+    primary_button,
+    secondary_button,
+    muted_text,
+    status_chip,
+    show_error,
+    show_success,
+)
 
 
 CATEGORY_OPTIONS = [
@@ -21,29 +35,147 @@ CATEGORY_OPTIONS = [
 def donations_view(page: ft.Page):
     is_donor = AuthService.user and AuthService.user.get("role") == "donor"
     donations_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
+    media_base_url = BASE_URL.rsplit("/api", 1)[0]
+    image_fit_cover = getattr(getattr(ft, "ImageFit", None), "COVER", "cover")
 
-    title = ft.TextField(label="Title", color=INPUT_TEXT)
-    description = ft.TextField(label="Description", multiline=True, min_lines=3, color=INPUT_TEXT)
-    category = ft.Dropdown(label="Category", options=CATEGORY_OPTIONS, value="other")
-    quantity = ft.TextField(label="Quantity", value="1", color=INPUT_TEXT)
-    expiry_date = ft.TextField(label="Expiry Date (YYYY-MM-DD)", color=INPUT_TEXT)
+    def show_claim_sent_alert():
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Claim Request Sent"),
+            content=ft.Text("Your claim request has been sent to the donor successfully."),
+            actions=[
+                ft.TextButton(
+                    "OK",
+                    on_click=lambda e: close_claim_sent_alert(dialog),
+                )
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if hasattr(page, "open"):
+            page.open(dialog)
+            return
+
+        page.dialog = dialog
+        if hasattr(page, "overlay") and dialog not in page.overlay:
+            page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
+    def close_claim_sent_alert(dialog):
+        if hasattr(page, "close"):
+            page.close(dialog)
+            return
+
+        dialog.open = False
+        if hasattr(page, "overlay") and dialog in page.overlay:
+            page.overlay.remove(dialog)
+        page.update()
+
+    title = auth_input("Title", ft.Icons.TITLE)
+    description = auth_input("Description", ft.Icons.DESCRIPTION, multiline=True)
+    category = ft.Dropdown(
+        label="Category",
+        options=CATEGORY_OPTIONS,
+        value="other",
+        border_radius=14,
+        filled=True,
+        bgcolor="white",
+    )
+    quantity = auth_input("Quantity", ft.Icons.NUMBERS)
+    quantity.value = "1"
+    expiry_date = auth_input("Expiry Date (YYYY-MM-DD)", ft.Icons.CALENDAR_MONTH)
+
     selected_image = ft.Text("No image selected", color="#6B7280")
     selected_image_path = {"value": None}
 
+    def resolve_image_src(item):
+        image_src = item.get("image_url") or item.get("image")
+        if not image_src:
+            return None
+
+        parsed = urlparse(str(image_src))
+        if parsed.scheme and parsed.netloc:
+            return image_src
+
+        return urljoin(f"{media_base_url}/", str(image_src).lstrip("/"))
+
+    def display_status(status):
+        normalized_status = (status or "available").strip().lower()
+        if normalized_status == "pending":
+            return "available"
+        return normalized_status
+
+    def donor_feed_status(item):
+        normalized_status = (item.get("feed_status") or item.get("status") or "available").strip().lower()
+        if normalized_status == "completed":
+            return "claimed"
+        if normalized_status == "expired":
+            return "rejected"
+        return normalized_status
+
+    def status_color(status):
+        return {
+            "available": "#027A48",
+            "claimed": "#1D4ED8",
+            "expired": "#B54708",
+            "rejected": "#B42318",
+        }.get(status, "#667085")
+
     def donation_card(item):
         donor_data = item.get("donor") or {}
+        status = donor_feed_status(item) if is_donor else display_status(item.get("status"))
+        image_src = resolve_image_src(item)
+
         controls = [
-            ft.Text(item.get("title", "Untitled"), size=18, weight=ft.FontWeight.BOLD),
-            ft.Text(item.get("description", "")),
-            ft.Text(f"Category: {item.get('category', 'n/a')} | Qty: {item.get('quantity', 1)}"),
-            ft.Text(f"Status: {item.get('status', 'n/a')}"),
-            ft.Text(f"Donor: {donor_data.get('email', 'Unknown')}"),
+            ft.Text(
+                item.get("title", "Untitled"),
+                size=18,
+                weight=ft.FontWeight.BOLD,
+                color="#1F2937",
+            ),
+            muted_text(item.get("description", "")),
         ]
 
+        if image_src:
+            controls.append(
+                ft.Container(
+                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                    border_radius=16,
+                    content=ft.Image(
+                        src=image_src,
+                        width=520,
+                        height=220,
+                        fit=image_fit_cover,
+                        error_content=ft.Container(
+                            padding=16,
+                            bgcolor="#F2F4F7",
+                            content=muted_text("Image could not be loaded."),
+                        ),
+                    ),
+                )
+            )
+
+        controls.extend(
+            [
+            ft.Row(
+                [
+                    status_chip(f"Category: {item.get('category', 'n/a')}", color="#1D4ED8"),
+                    status_chip(f"Qty: {item.get('quantity', 1)}", color="#027A48"),
+                    status_chip(f"Status: {status}", color=status_color(status)),
+                ],
+                wrap=True,
+                spacing=8,
+            ),
+            muted_text(f"Donor: {donor_data.get('email', 'Unknown')}"),
+            ]
+        )
+
         if is_donor:
-            controls.append(ft.Text(f"Coordinates: {item.get('latitude')}, {item.get('longitude')}"))
+            controls.append(
+                muted_text(f"Coordinates: {item.get('latitude')}, {item.get('longitude')}")
+            )
         else:
-            message_field = ft.TextField(label="Claim message", multiline=True, min_lines=2, color=INPUT_TEXT)
+            message_field = auth_input("Claim message", ft.Icons.CHAT, multiline=True)
 
             def handle_claim_click(e, donation_id=item["id"], field=message_field):
                 page.run_task(claim_donation, donation_id, field)
@@ -51,37 +183,34 @@ def donations_view(page: ft.Page):
             controls.extend(
                 [
                     message_field,
-                    ft.Button(
-                        "Claim Donation",
-                        on_click=handle_claim_click,
-                        bgcolor=SECONDARY_GREEN,
-                        color=BUTTON_TEXT,
-                    ),
+                    secondary_button("Claim Donation", handle_claim_click, width=220, icon=ft.Icons.SEND),
                 ]
             )
 
         return ft.Container(
-            content=ft.Column(controls, spacing=8),
-            padding=15,
-            border=ft.Border.all(1, "#d9d9d9"),
-            border_radius=12,
+            content=ft.Column(controls, spacing=10),
+            padding=18,
+            border=ft.Border.all(1, "#D6E2D3"),
+            border_radius=18,
             bgcolor="#FFFEFB",
         )
 
     async def load_donations():
         response = await asyncio.to_thread(
-            DonationService.get_my_donations if is_donor else DonationService.get_donations
+            DonationService.get_donations if is_donor else (lambda: DonationService.get_donations(status="pending"))
         )
         donations_column.controls.clear()
 
         if response.status_code != 200:
-            show_message(page, f"Failed to load donations: {response.text}", "red")
+            show_error(page, f"Failed to load donations: {response.text}")
             page.update()
             return
 
         items = response.json()
         if not items:
-            donations_column.controls.append(ft.Text("No donations found yet."))
+            donations_column.controls.append(
+                muted_text("No donations found yet.")
+            )
         else:
             for item in items:
                 donations_column.controls.append(donation_card(item))
@@ -110,7 +239,6 @@ def donations_view(page: ft.Page):
 
         file_path = await asyncio.to_thread(choose_file)
         if file_path:
-            import os
             selected_image_path["value"] = file_path
             selected_image.value = os.path.basename(file_path)
         else:
@@ -131,14 +259,14 @@ def donations_view(page: ft.Page):
                 image=selected_image_path["value"],
             )
         except ValueError:
-            show_message(page, "Quantity must be a number.", "red")
+            show_error(page, "Quantity must be a number.")
             return
         except Exception as ex:
-            show_message(page, f"Error: {ex}", "red")
+            show_error(page, f"Error: {ex}")
             return
 
         if response.status_code in (200, 201):
-            show_message(page, "Donation created successfully.", "green")
+            show_success(page, "Donation created successfully.")
             title.value = ""
             description.value = ""
             quantity.value = "1"
@@ -147,16 +275,21 @@ def donations_view(page: ft.Page):
             selected_image.value = "No image selected"
             await load_donations()
         else:
-            show_message(page, f"Could not create donation: {response.text}", "red")
+            show_error(page, f"Could not create donation: {response.text}")
 
     async def claim_donation(donation_id, message_field):
-        response = await asyncio.to_thread(DonationService.claim_donation, donation_id, message_field.value or "")
+        response = await asyncio.to_thread(
+            DonationService.claim_donation,
+            donation_id,
+            message_field.value or ""
+        )
         if response.status_code in (200, 201):
-            show_message(page, "Claim request sent.", "green")
+            show_success(page, "Claim request sent.")
             message_field.value = ""
             await load_donations()
+            show_claim_sent_alert()
         else:
-            show_message(page, f"Could not claim donation: {response.text}", "red")
+            show_error(page, f"Could not claim donation: {response.text}")
 
     async def go_back(e):
         await page.push_route("/dashboard")
@@ -167,51 +300,83 @@ def donations_view(page: ft.Page):
             section_card(
                 "Create Donation",
                 [
+                    muted_text("Add the donation details below and optionally attach an image."),
                     title,
                     description,
                     category,
                     quantity,
                     expiry_date,
-                    ft.Row(
-                        [
-                            ft.Button("Upload Image", on_click=pick_image, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-                            selected_image,
-                        ],
-                        wrap=True,
-                        spacing=12,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ft.Container(
+                        padding=16,
+                        border_radius=16,
+                        bgcolor="#FFFFFF",
+                        border=ft.Border.all(1, "#D6E2D3"),
+                        content=ft.Column(
+                            [
+                                ft.Row(
+                                    [
+                                        ft.Icon(ft.Icons.IMAGE, color="#6A994E"),
+                                        ft.Text("Donation Image", size=16, weight=ft.FontWeight.BOLD, color="#1F2937"),
+                                    ],
+                                    spacing=10,
+                                ),
+                                muted_text("Choose an optional image from your device."),
+                                ft.Row(
+                                    [
+                                        secondary_button("Upload Image", pick_image, width=170, icon=ft.Icons.UPLOAD_FILE),
+                                        selected_image,
+                                    ],
+                                    wrap=True,
+                                    spacing=12,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                            ],
+                            spacing=12,
+                        ),
                     ),
-                    ft.Button("Create Donation", on_click=create_donation, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
+                    primary_button("Create Donation", create_donation, width=220, icon=ft.Icons.ADD_CIRCLE),
                 ],
-                subtitle="Add the item details and optionally attach an image from your device.",
+                subtitle="Only donors can create new donation posts.",
             ),
         ]
 
     page.run_task(load_donations)
+
+    feed_title = "All Donation Posts" if is_donor else "Available Donations"
+    feed_subtitle = (
+        "Browse all donation posts. Donors can review statuses but cannot claim."
+        if is_donor
+        else "Browse active donations and send a claim request."
+    )
 
     return ft.View(
         route="/donations",
         appbar=build_appbar("Donations", go_back),
         controls=[
             page_container(
-                *create_controls,
-                section_card(
-                    "Donation Feed",
-                    [
-                        ft.Row(
-                            [
-                                ft.Text("Browse current donations", color="#4B5563"),
-                                ft.Button("Refresh", on_click=lambda e: page.run_task(load_donations), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
-                        donations_column,
-                    ],
-                ),
-                ft.Row(
-                    [ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT, width=140)],
-                    alignment=ft.MainAxisAlignment.END,
-                ),
+                centered_content(
+                    *create_controls,
+                    section_card(
+                        feed_title,
+                        [
+                            ft.Row(
+                                [
+                                    muted_text(feed_subtitle),
+                                    secondary_button(
+                                        "Refresh",
+                                        lambda e: page.run_task(load_donations),
+                                        width=140,
+                                        icon=ft.Icons.REFRESH,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                wrap=True,
+                            ),
+                            donations_column,
+                        ],
+                    ),
+                )
             ),
         ],
     )

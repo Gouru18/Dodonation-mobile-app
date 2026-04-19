@@ -38,18 +38,16 @@ def admin_panel_view(page: ft.Page):
     section_meta = {
         "home": {"title": "Site administration", "group": None, "sidebar": False},
         "users": {"title": "Users", "group": "Accounts", "sidebar": True, "add_label": "ADD USER"},
-        "faqs": {"title": "Chatbot faqs", "group": "Chatbot", "sidebar": True, "add_label": "ADD CHATBOT FAQ"},
         "claims": {"title": "Claim requests", "group": "Donations", "sidebar": True, "add_label": None},
         "donations": {"title": "Donations", "group": "Donations", "sidebar": True, "add_label": "ADD DONATION"},
         "meetings": {"title": "Meetings", "group": "Meetings", "sidebar": True, "add_label": "ADD MEETING"},
         "donor_profiles": {"title": "Donor profiles", "group": "Profiles", "sidebar": True, "add_label": "ADD DONOR PROFILE"},
         "ngo_profiles": {"title": "Ngo profiles", "group": "Profiles", "sidebar": True, "add_label": "ADD NGO PROFILE"},
-        "permits": {"title": "Ngo permit applications", "group": "Profiles", "sidebar": True, "add_label": "ADD NGO PERMIT APPLICATION"},
+        "permits": {"title": "Ngo permit applications", "group": "Profiles", "sidebar": True, "add_label": None},
     }
 
     sidebar_groups = [
         ("Accounts", [("users", "Users")]),
-        ("Chatbot", [("faqs", "Chatbot faqs")]),
         ("Donations", [("claims", "Claim requests"), ("donations", "Donations")]),
         ("Meetings", [("meetings", "Meetings")]),
         ("Profiles", [("donor_profiles", "Donor profiles"), ("permits", "Ngo permit applications"), ("ngo_profiles", "Ngo profiles")]),
@@ -60,7 +58,6 @@ def admin_panel_view(page: ft.Page):
         "dashboard": {},
         "recent_actions": [],
         "users": [],
-        "faqs": [],
         "claims": [],
         "donations": [],
         "meetings": [],
@@ -73,7 +70,6 @@ def admin_panel_view(page: ft.Page):
         "user_email_filter": "all",
         "permit_status_filter": "all",
         "selected_user": None,
-        "selected_faq": None,
         "selected_claim": None,
         "selected_donation": None,
         "selected_meeting": None,
@@ -403,13 +399,6 @@ def admin_panel_view(page: ft.Page):
                     [
                         ft.Container(bgcolor=colors["header"], padding=12, content=admin_text("ACCOUNTS", weight=ft.FontWeight.W_600)),
                         module_row("Users", "users"),
-                    ],
-                    spacing=0,
-                ),
-                ft.Column(
-                    [
-                        ft.Container(bgcolor=colors["header"], padding=12, content=admin_text("CHATBOT", weight=ft.FontWeight.W_600)),
-                        module_row("Chatbot faqs", "faqs"),
                     ],
                     spacing=0,
                 ),
@@ -807,47 +796,6 @@ def admin_panel_view(page: ft.Page):
         user_bulk_action.value = action
         page.run_task(run_user_bulk_action)
 
-    faq_search = input_field()
-    faq_search.hint_text = "Search by question"
-    faq_question = input_field("Question")
-    faq_answer = multiline_field("Answer", "", 6)
-
-    def clear_faq_form():
-        state["selected_faq"] = None
-        faq_question.value = ""
-        faq_answer.value = ""
-
-    def load_faq_form(item):
-        state["selected_faq"] = item
-        faq_question.value = item.get("question") or ""
-        faq_answer.value = item.get("answer") or ""
-
-    async def load_faqs():
-        response = await asyncio.to_thread(AdminService.list_faqs, faq_search.value or "")
-        if response.status_code == 200:
-            state["faqs"] = response.json()
-            render()
-            page.update()
-
-    async def save_faq():
-        payload = {"question": faq_question.value, "answer": faq_answer.value}
-        selected = state["selected_faq"] or {}
-        response = await run_request(lambda: AdminService.save_faq(selected.get("id"), payload), "FAQ saved.", load_faqs)
-        if response.status_code in (200, 201):
-            load_faq_form(response.json())
-            render()
-            page.update()
-            return True
-        return False
-
-    async def delete_faq():
-        selected = state["selected_faq"] or {}
-        if not selected.get("id"):
-            show_message(page, "Select a FAQ first.", "red")
-            return
-        await run_request(lambda: AdminService.delete_faq(selected["id"]), "FAQ deleted.", load_faqs)
-        clear_faq_form()
-
     claim_search = input_field()
     claim_search.hint_text = "Search by donation title or NGO email"
     claim_receiver_username = input_field("NGO username")
@@ -909,8 +857,15 @@ def admin_panel_view(page: ft.Page):
         if not selected.get("id"):
             show_message(page, "Select a claim request first.", "red")
             return
-        await run_request(lambda: AdminService.delete_claim(selected["id"]), "Claim request deleted.", load_claims)
-        clear_claim_form()
+        response = await run_request(lambda: AdminService.delete_claim(selected["id"]), "Claim request deleted.", load_claims)
+        if response.status_code == 204:
+            clear_claim_form()
+            render()
+            page.update()
+        elif response.status_code == 404:
+            clear_claim_form()
+            await load_claims()
+            show_message(page, "That claim request was already removed.", colors["warning"])
 
     donor_profile_search = input_field()
     donor_profile_search.hint_text = "Search by full name or email"
@@ -973,7 +928,6 @@ def admin_panel_view(page: ft.Page):
     ngo_profile_organization = input_field("Organization name")
     ngo_profile_registration = input_field("Registration number")
     ngo_profile_address = multiline_field("Address", "", 5)
-    ngo_profile_permit_path = input_field("Permit file path")
 
     def clear_ngo_profile_form():
         state["selected_ngo_profile"] = None
@@ -981,7 +935,6 @@ def admin_panel_view(page: ft.Page):
         ngo_profile_organization.value = ""
         ngo_profile_registration.value = ""
         ngo_profile_address.value = ""
-        ngo_profile_permit_path.value = ""
 
     def load_ngo_profile_form(item):
         state["selected_ngo_profile"] = item
@@ -989,7 +942,6 @@ def admin_panel_view(page: ft.Page):
         ngo_profile_organization.value = item.get("organization_name") or ""
         ngo_profile_registration.value = item.get("registration_number") or ""
         ngo_profile_address.value = item.get("address") or ""
-        ngo_profile_permit_path.value = ""
 
     async def load_ngo_profiles():
         response = await asyncio.to_thread(AdminService.list_ngo_profiles, ngo_profile_search.value or "")
@@ -1013,21 +965,7 @@ def admin_panel_view(page: ft.Page):
             selected = state["selected_ngo_profile"] or {}
             response = await run_request(lambda: AdminService.save_ngo_profile(selected.get("id"), payload), "NGO profile saved.", load_ngo_profiles)
             if response.status_code in (200, 201):
-                saved_profile = response.json()
-                if ngo_profile_permit_path.value:
-                    permit = saved_profile.get("permit_application") or {}
-                    permit_response = await run_request(
-                        lambda: AdminService.save_permit(
-                            permit.get("id"),
-                            saved_profile.get("id"),
-                            ngo_profile_permit_path.value,
-                        ),
-                        "NGO permit uploaded.",
-                        load_permits,
-                    )
-                    if permit_response.status_code not in (200, 201):
-                        return False
-                load_ngo_profile_form(saved_profile)
+                load_ngo_profile_form(response.json())
                 render()
                 page.update()
                 return True
@@ -1071,19 +1009,18 @@ def admin_panel_view(page: ft.Page):
 
     async def save_permit():
         try:
-            selected_ngo = find_ngo_profile_by_username(permit_username.value)
-            if not selected_ngo:
-                show_message(page, "Select an existing NGO username.", "red")
-                return False
             selected = state["selected_permit"] or {}
+            if not selected.get("id"):
+                show_message(page, "Select an existing permit application first.", "red")
+                return False
             response = await run_request(
                 lambda: AdminService.save_permit(
                     selected.get("id"),
-                    selected_ngo.get("id"),
-                    permit_file_path.value or None,
+                    None,
+                    (permit_file_path.value or "").strip() or None,
                     permit_rejection_reason.value or "",
                 ),
-                "Permit application saved.",
+                "Permit application updated.",
                 load_permits,
             )
             if response.status_code in (200, 201):
@@ -1306,8 +1243,6 @@ def admin_panel_view(page: ft.Page):
         state["section"] = section_name
         if section_name == "users":
             clear_user_form()
-        elif section_name == "faqs":
-            clear_faq_form()
         elif section_name == "claims":
             clear_claim_form()
         elif section_name == "donor_profiles":
@@ -1531,44 +1466,6 @@ def admin_panel_view(page: ft.Page):
             spacing=18,
         )
 
-    def faqs_page():
-        rows = [
-            table_row(
-                [
-                    table_cell("", 360, control=text_link(clean_value(item.get("question")), lambda e, item=item: select_faq(item))),
-                    table_cell(clean_value(item.get("answer"))[:90], 520),
-                ],
-                active=(state["selected_faq"] or {}).get("id") == item.get("id"),
-            )
-            for item in state["faqs"]
-        ]
-        editor = editor_panel(
-            f"{'Change' if (state['selected_faq'] or {}).get('id') else 'Add'} chatbot faq",
-            [
-                field_row("Question:", faq_question),
-                field_row("Answer:", faq_answer),
-            ],
-            save_faq,
-            delete_faq,
-            clear_faq_form,
-        )
-        return simple_section_page(
-            "Chatbot faqs",
-            f"{len(state['faqs'])} chatbot faqs",
-            "ADD CHATBOT FAQ",
-            lambda e: open_create_mode("faqs"),
-            faq_search,
-            lambda e: page.run_task(load_faqs),
-            [table_cell("QUESTION", 360), table_cell("ANSWER", 520)],
-            rows,
-            editor,
-        )
-
-    def select_faq(item):
-        load_faq_form(item)
-        render()
-        page.update()
-
     def claims_page():
         rows = [
             table_row(
@@ -1671,7 +1568,6 @@ def admin_panel_view(page: ft.Page):
                 field_row("Organization name:", ngo_profile_organization),
                 field_row("Registration number:", ngo_profile_registration),
                 field_row("Address:", ngo_profile_address),
-                field_row("Permit file path:", ngo_profile_permit_path, "Paste the full local file path of the permit to upload or replace it."),
             ],
             save_ngo_profile,
             delete_ngo_profile,
@@ -1739,7 +1635,7 @@ def admin_panel_view(page: ft.Page):
                 field_row("Submitted at:", admin_text(format_dt(selected.get("submitted_at")))),
                 field_row("Reviewed by:", admin_text(clean_value(((selected.get("reviewed_by") or {}).get("email"))))),
                 field_row("Rejection reason:", permit_rejection_reason),
-                field_row("Permit file path:", permit_file_path, "Paste the full local file path only if you want to replace the existing permit file."),
+                field_row("Permit file path:", permit_file_path, "Optional: replace the uploaded permit file for the selected application only."),
                 field_row("Current file:", text_link("Open uploaded permit", lambda e, url=selected.get("permit_file_url"): open_url(url)) if selected.get("permit_file_url") else admin_text("No uploaded permit", color=colors["muted"])),
                 field_row(
                     "Review actions:",
@@ -1922,8 +1818,6 @@ def admin_panel_view(page: ft.Page):
             return home_page()
         if state["section"] == "users":
             return users_page()
-        if state["section"] == "faqs":
-            return faqs_page()
         if state["section"] == "claims":
             return claims_page()
         if state["section"] == "donor_profiles":
@@ -1943,7 +1837,6 @@ def admin_panel_view(page: ft.Page):
 
     page.run_task(load_dashboard)
     page.run_task(load_users)
-    page.run_task(load_faqs)
     page.run_task(load_claims)
     page.run_task(load_donor_profiles)
     page.run_task(load_ngo_profiles)

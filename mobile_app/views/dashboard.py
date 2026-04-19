@@ -1,8 +1,18 @@
 import flet as ft
 from services.auth_service import AuthService
-from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
-from utils.helpers import build_appbar, page_container, section_card
+from utils.helpers import (
+    build_appbar,
+    page_container,
+    centered_content,
+    section_card,
+    primary_button,
+    secondary_button,
+    subtle_text_button,
+    muted_text,
+    status_chip,
+)
 from views.admin_panel import admin_panel_view
+
 
 def dashboard_view(page: ft.Page):
     user = AuthService.user or {}
@@ -26,58 +36,81 @@ def dashboard_view(page: ft.Page):
     async def open_permits(e):
         await page.push_route("/permits")
 
-    async def open_chatbot(e):
-        await page.push_route("/chatbot")
-
-    async def view_map(e):
+    async def open_map(e):
         await page.push_route("/map")
 
     async def logout(e):
         AuthService.logout()
         await page.push_route("/")
 
-    action_buttons = [
-        ft.Button("My Profile", on_click=open_profile, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
-        ft.Button("Donations", on_click=open_donations, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT, width=180),
-        ft.Button("Claims", on_click=open_claims, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
-        ft.Button("Meetings", on_click=open_meetings, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT, width=180),
+    role_label = role.capitalize() if role else "Unknown"
+
+    quick_actions = [
+        primary_button("My Profile", open_profile, width=180, icon=ft.Icons.PERSON),
+        secondary_button("Donations", open_donations, width=180, icon=ft.Icons.VOLUNTEER_ACTIVISM),
+        primary_button("Claims", open_claims, width=180, icon=ft.Icons.ASSIGNMENT_TURNED_IN),
+        secondary_button("Meetings", open_meetings, width=180, icon=ft.Icons.VIDEO_CALL),
+        secondary_button("Meeting Map", open_map, width=180, icon=ft.Icons.MAP),
     ]
 
     if role == "ngo":
-        action_buttons.append(ft.Button("Permit", on_click=open_permits, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180))
+        quick_actions.append(
+            primary_button("Permit", open_permits, width=180, icon=ft.Icons.BADGE)
+        )
+
+    welcome_subtitle = (
+        "Track your donations, claims, meetings, and permit status from one place."
+        if role == "ngo"
+        else "Manage your donations, received claims, and meetings from one place."
+    )
 
     return ft.View(
         route="/dashboard",
         appbar=build_appbar("Dashboard"),
         controls=[
             page_container(
-                section_card(
-                    "Welcome to Dodonation",
-                    [
-                        ft.Text(user.get("username", "") or user.get("email", ""), size=16),
-                        ft.Text(f"Role: {role or 'unknown'}", size=14, color="#4B5563"),
-                    ],
-                    subtitle="Manage your donations, claims, meetings, and support tools from one place.",
-                ),
-                section_card(
-                    "Quick Actions",
-                    [
-                        ft.Row(action_buttons[:2], wrap=True, spacing=12),
-                        ft.Row(action_buttons[2:], wrap=True, spacing=12),
-                        ft.Row(
-                            [
-                                ft.Button("Open Chatbot", on_click=open_chatbot, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT, width=180),
-                                ft.Button("Meeting Map", on_click=view_map, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT, width=180),
-                            ],
-                            wrap=True,
-                            spacing=12,
-                        ),
-                    ],
-                ),
-                ft.Row(
-                    [ft.Button("Logout", on_click=logout, bgcolor="#666666", color=BUTTON_TEXT, width=160)],
-                    alignment=ft.MainAxisAlignment.END,
-                ),
+                centered_content(
+                    section_card(
+                        "Welcome to Dodonation",
+                        [
+                            ft.Text(
+                                user.get("username", "") or user.get("email", "User"),
+                                size=18,
+                                weight=ft.FontWeight.BOLD,
+                                color="#1F2937",
+                            ),
+                            muted_text(f"Signed in as: {user.get('email', 'No email')}"),
+                            status_chip(f"Role: {role_label}", color="#1D4ED8"),
+                        ],
+                        subtitle=welcome_subtitle,
+                    ),
+                    section_card(
+                        "Quick Actions",
+                        [
+                            ft.ResponsiveRow(
+                                [
+                                    ft.Container(content=btn, col={"sm": 12, "md": 6})
+                                    for btn in quick_actions
+                                ],
+                                spacing=12,
+                                run_spacing=12,
+                            )
+                        ],
+                        subtitle="Use these shortcuts to move around the app quickly.",
+                    ),
+                    section_card(
+                        "Account",
+                        [
+                            muted_text(
+                                "If you are an NGO, your permit status and approval workflow are available in the permit section."
+                            ),
+                            ft.Row(
+                                [subtle_text_button("Logout", logout)],
+                                alignment=ft.MainAxisAlignment.END,
+                            ),
+                        ],
+                    ),
+                )
             ),
         ],
     )

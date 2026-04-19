@@ -2,7 +2,6 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    AdminChatbotFAQViewSet,
     AdminClaimRequestViewSet,
     AdminDashboardViewSet,
     AdminDonationViewSet,
@@ -24,7 +23,6 @@ router.register(r'permits', AdminNGOPermitViewSet, basename='admin-permits')
 router.register(r'donations', AdminDonationViewSet, basename='admin-donations')
 router.register(r'claims', AdminClaimRequestViewSet, basename='admin-claims')
 router.register(r'meetings', AdminMeetingViewSet, basename='admin-meetings')
-router.register(r'faqs', AdminChatbotFAQViewSet, basename='admin-faqs')
 
 urlpatterns = [
     path('', include(router.urls)),

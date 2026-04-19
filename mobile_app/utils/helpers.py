@@ -1,35 +1,120 @@
 # pylint: disable=E1121, E1123
 import flet as ft
+from utils.constants import (
+    PRIMARY_GREEN,
+    SECONDARY_GREEN,
+    PAGE_BG,
+    CARD_BG,
+    CARD_BORDER,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    TEXT_MUTED,
+    BUTTON_TEXT,
+    INPUT_TEXT,
+    INPUT_BG,
+    SUCCESS,
+    DANGER,
+    INFO,
+    RADIUS_LG,
+    RADIUS_MD,
+    RADIUS_SM,
+    SPACE_SM,
+    SPACE_MD,
+    SPACE_LG,
+    SPACE_XL,
+    AUTH_CARD_WIDTH,
+    AUTH_BUTTON_WIDTH,
+)
 
-PAGE_BG = "#F4F7F1"
-CARD_BG = "#FFFEFB"
-CARD_BORDER = "#D6E2D3"
-TEXT_MUTED = "#6B7280"
 
-def form_container(title, controls):
+def primary_button(text, on_click, width=AUTH_BUTTON_WIDTH, icon=None):
+    return ft.Button(
+        text,
+        on_click=on_click,
+        width=width,
+        height=46,
+        icon=icon,
+        style=ft.ButtonStyle(
+            bgcolor=PRIMARY_GREEN,
+            color=BUTTON_TEXT,
+            shape=ft.RoundedRectangleBorder(radius=RADIUS_SM),
+        ),
+    )
+
+
+def secondary_button(text, on_click, width=AUTH_BUTTON_WIDTH, icon=None):
+    return ft.Button(
+        text,
+        on_click=on_click,
+        width=width,
+        height=46,
+        icon=icon,
+        style=ft.ButtonStyle(
+            bgcolor=SECONDARY_GREEN,
+            color=BUTTON_TEXT,
+            shape=ft.RoundedRectangleBorder(radius=RADIUS_SM),
+        ),
+    )
+
+
+def subtle_text_button(text, on_click):
+    return ft.TextButton(
+        text,
+        on_click=on_click,
+        style=ft.ButtonStyle(color=SECONDARY_GREEN),
+    )
+
+
+def auth_input(label, icon=None, password=False, multiline=False):
+    return ft.TextField(
+        label=label,
+        prefix_icon=icon,
+        password=password,
+        can_reveal_password=password,
+        multiline=multiline,
+        color=INPUT_TEXT,
+        border_radius=RADIUS_SM,
+        filled=True,
+        bgcolor=INPUT_BG,
+    )
+
+
+def helper_text(text):
+    return ft.Text(text, size=14, color=TEXT_SECONDARY)
+
+
+def muted_text(text, size=13):
+    return ft.Text(text, size=size, color=TEXT_MUTED)
+
+
+def section_header(title, subtitle=None):
+    items = [
+        ft.Text(title, size=28, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+    ]
+    if subtitle:
+        items.append(ft.Text(subtitle, size=13, color=TEXT_MUTED))
+    return ft.Column(items, spacing=4)
+
+
+def form_container(title, controls, subtitle="Share with care, coordinate with confidence."):
     return ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text(title, size=28, weight=ft.FontWeight.BOLD, color="#1F2937"),
-                ft.Text(
-                    "Share with care, coordinate with confidence.",
-                    size=13,
-                    color=TEXT_MUTED,
-                ),
+                section_header(title, subtitle),
                 ft.Divider(color=CARD_BORDER),
-                *controls
+                *controls,
             ],
-            spacing=15
+            spacing=SPACE_MD,
         ),
-        padding=24,
-        width=360,
+        padding=28,
+        width=AUTH_CARD_WIDTH,
         bgcolor=CARD_BG,
         border=ft.Border.all(1, CARD_BORDER),
-        border_radius=24,
+        border_radius=RADIUS_LG,
         shadow=ft.BoxShadow(
             spread_radius=0,
             blur_radius=18,
-            color="#00000014",
+            color="#00000012",
             offset=ft.Offset(0, 8),
         ),
     )
@@ -39,26 +124,28 @@ def auth_scaffold(page, route, title, card):
     return ft.View(
         route=route,
         appbar=ft.AppBar(
-            title=ft.Text(title, color="#1F2937"),
+            title=ft.Text(title, color=TEXT_PRIMARY, weight=ft.FontWeight.BOLD),
             bgcolor=PAGE_BG,
         ),
         bgcolor=PAGE_BG,
         controls=[
             ft.Container(
                 expand=True,
-                padding=24,
+                padding=SPACE_XL,
                 content=ft.Stack(
                     [
                         ft.Container(
                             expand=True,
                             border_radius=36,
                             gradient=ft.LinearGradient(
-                                colors=[PAGE_BG, "#E6EFE1", "#FDFCF8"],
+                                colors=[PAGE_BG, "#EAF2E6", "#FDFCF8"],
+                                begin=ft.Alignment.TOP_CENTER,
+                                end=ft.Alignment.BOTTOM_CENTER,
                             ),
                         ),
                         ft.Container(
                             expand=True,
-                            alignment=ft.Alignment(0, 0),
+                            alignment=ft.Alignment.CENTER,
                             content=ft.Column(
                                 [card],
                                 alignment=ft.MainAxisAlignment.CENTER,
@@ -77,9 +164,13 @@ def auth_scaffold(page, route, title, card):
 def build_appbar(title, on_back=None):
     leading = None
     if on_back is not None:
-        leading = ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=on_back, icon_color="#1F2937")
+        leading = ft.IconButton(
+            icon=ft.Icons.ARROW_BACK,
+            on_click=on_back,
+            icon_color=TEXT_PRIMARY,
+        )
     return ft.AppBar(
-        title=ft.Text(title, color="#1F2937", weight=ft.FontWeight.BOLD),
+        title=ft.Text(title, color=TEXT_PRIMARY, weight=ft.FontWeight.BOLD),
         leading=leading,
         bgcolor=PAGE_BG,
     )
@@ -88,10 +179,10 @@ def build_appbar(title, on_back=None):
 def page_container(*controls, expand=True, scroll=ft.ScrollMode.AUTO):
     return ft.Container(
         expand=expand,
-        padding=24,
+        padding=SPACE_XL,
         content=ft.Column(
             list(controls),
-            spacing=18,
+            spacing=SPACE_LG,
             scroll=scroll,
             expand=expand,
         ),
@@ -104,13 +195,13 @@ def centered_content(*controls, max_width=980):
         expand=True,
         content=ft.Container(
             width=max_width,
-            content=ft.Column(list(controls), spacing=18, expand=False),
+            content=ft.Column(list(controls), spacing=SPACE_LG, expand=False),
         ),
     )
 
 
 def section_card(title, controls, subtitle=None):
-    items = [ft.Text(title, size=22, weight=ft.FontWeight.BOLD, color="#1F2937")]
+    items = [ft.Text(title, size=22, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY)]
     if subtitle:
         items.append(ft.Text(subtitle, size=13, color=TEXT_MUTED))
     items.extend(controls)
@@ -122,13 +213,61 @@ def section_card(title, controls, subtitle=None):
         content=ft.Column(items, spacing=14),
     )
 
+
+def role_card(title, description, icon, on_click, accent):
+    return ft.Container(
+        padding=18,
+        border_radius=RADIUS_MD,
+        bgcolor="#FFFFFF",
+        border=ft.Border.all(1, CARD_BORDER),
+        content=ft.Column(
+            [
+                ft.Icon(icon, size=34, color=accent),
+                ft.Text(title, size=18, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
+                ft.Text(description, size=13, color=TEXT_MUTED),
+                ft.Container(height=6),
+                ft.Button(
+                    f"Continue as {title}",
+                    on_click=on_click,
+                    width=AUTH_BUTTON_WIDTH,
+                    height=44,
+                    style=ft.ButtonStyle(
+                        bgcolor=accent,
+                        color=BUTTON_TEXT,
+                        shape=ft.RoundedRectangleBorder(radius=RADIUS_SM),
+                    ),
+                ),
+            ],
+            spacing=10,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    )
+
+
+def status_chip(text, color=INFO):
+    return ft.Container(
+        padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+        bgcolor=f"{color}1A",
+        border_radius=999,
+        content=ft.Text(text, size=12, color=color, weight=ft.FontWeight.W_500),
+    )
+
+
 def show_message(page, msg, color="green"):
     page.snack_bar = ft.SnackBar(
-        ft.Text(msg),
+        ft.Text(msg, color="white"),
         bgcolor=color
     )
     page.snack_bar.open = True
     page.update()
+
+
+def show_success(page, msg):
+    show_message(page, msg, SUCCESS)
+
+
+def show_error(page, msg):
+    show_message(page, msg, DANGER)
 
 
 def clear_page(page):

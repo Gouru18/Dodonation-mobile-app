@@ -4,7 +4,6 @@ from views.role_selection import role_selection_view
 from views.register import register_donor_view, register_ngo_view
 from views.otp import otp_view
 from views.dashboard import dashboard_view
-from views.chatbot import chatbot_view
 from views.map import map_view
 from views.donations import donations_view
 from views.claims import claims_view
@@ -13,17 +12,18 @@ from views.permits import permits_view
 from views.meetings import meetings_view
 from views.admin_panel import admin_panel_view
 
+
 def main(page: ft.Page):
     page.title = "Dodonation"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.window_width = 400
-    page.window_height = 700
+    page.window_width = 430
+    page.window_height = 760
     page.bgcolor = "#F4F7F1"
+    page.padding = 0
 
     def build_views():
         page.views.clear()
 
-        # Always add a root view
         if page.route == "/":
             page.views.append(login_view(page))
         elif page.route == "/role-selection":
@@ -46,8 +46,6 @@ def main(page: ft.Page):
             page.views.append(permits_view(page))
         elif page.route == "/meetings":
             page.views.append(meetings_view(page))
-        elif page.route == "/chatbot":
-            page.views.append(chatbot_view(page))
         elif page.route == "/map":
             page.views.append(map_view(page))
         elif page.route == "/admin-panel":
@@ -66,15 +64,14 @@ def main(page: ft.Page):
         build_views()
 
     async def view_pop(e: ft.ViewPopEvent):
-        page.views.pop()
-        top_view = page.views[-1]
-        await page.push_route(top_view.route)
+        if len(page.views) > 1:
+            page.views.pop()
+            await page.push_route(page.views[-1].route)
 
     page.on_route_change = route_change
     page.on_view_pop = view_pop
-
-    # Initial render
     build_views()
+
 
 if __name__ == "__main__":
     ft.run(main)

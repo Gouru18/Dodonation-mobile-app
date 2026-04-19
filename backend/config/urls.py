@@ -23,7 +23,6 @@ def api_root(request):
             'donations': '/api/donations/',
             'claims': '/api/claims/',
             'meetings': '/api/meetings/',
-            'chatbot': '/api/chatbot/',
         }
     })
 
@@ -34,7 +33,6 @@ urlpatterns = [
     path('api/auth/', include('accounts.urls')),
     path('api/admin/', include('adminpanel.urls')),
     path('api/profiles/', include('profiles.urls')),
-    path('api/chatbot/', include('chatbot.urls')),
 ]
 
 if settings.DEBUG:

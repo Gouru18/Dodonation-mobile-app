@@ -65,7 +65,6 @@ INSTALLED_APPS = [
     'profiles',
     'donations',
     'meetings',
-    'chatbot',
 ]
 
 MIDDLEWARE = [

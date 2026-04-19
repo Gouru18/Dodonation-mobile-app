@@ -13,7 +13,7 @@ class DonationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
-        queryset = Donation.objects.all().select_related('donor')
+        queryset = Donation.objects.all().select_related('donor').prefetch_related('claim_requests')
         category = self.request.query_params.get('category')
         status_value = self.request.query_params.get('status')
         donor_filter = self.request.query_params.get('donor')
@@ -24,6 +24,8 @@ class DonationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=status_value)
         if donor_filter == 'me' and self.request.user.is_authenticated:
             queryset = queryset.filter(donor=self.request.user)
+        elif self.request.user.is_authenticated and getattr(self.request.user, 'role', '') == 'ngo' and not status_value:
+            queryset = queryset.filter(status='pending')
 
         return queryset
 
@@ -47,6 +49,12 @@ class DonationViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Only NGO users can claim donations'},
                 status=status.HTTP_403_FORBIDDEN
+            )
+
+        if donation.status != 'pending':
+            return Response(
+                {'error': 'This donation is no longer available.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         # Check if claim already exists

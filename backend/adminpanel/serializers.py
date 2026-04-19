@@ -1,7 +1,6 @@
 from rest_framework import serializers
 
 from accounts.models import User, OTPCode
-from chatbot.models import ChatbotFAQ
 from donations.models import Donation, ClaimRequest
 from meetings.models import Meeting
 from profiles.models import DonorProfile, NGOProfile, NGOPermitApplication
@@ -259,10 +258,3 @@ class AdminMeetingSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-
-class AdminChatbotFAQSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ChatbotFAQ
-        fields = ['id', 'question', 'answer']
-        read_only_fields = ['id']
