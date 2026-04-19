@@ -3,8 +3,18 @@ import flet as ft
 
 from services.meeting_service import MeetingService
 from utils.app_state import AppState
-from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import build_appbar, centered_content, page_container, section_card, show_message
+from utils.helpers import (
+    build_appbar,
+    centered_content,
+    page_container,
+    section_card,
+    auth_input,
+    primary_button,
+    secondary_button,
+    muted_text,
+    show_error,
+    show_success,
+)
 
 try:
     import flet_map as ftm
@@ -13,17 +23,44 @@ except ImportError:
 
 
 def map_view(page: ft.Page):
-    location_text = ft.Text("Tap a point on the map to pick the physical meeting location.", size=16, color="#4B5563")
-    lat = ft.TextField(label="Latitude", width=180, color=INPUT_TEXT)
-    lon = ft.TextField(label="Longitude", width=180, color=INPUT_TEXT)
-    address = ft.TextField(label="Meeting Address", multiline=True, min_lines=2, color=INPUT_TEXT)
+    state = {
+        "meeting_loaded": False,
+        "can_pin_location": False,
+        "location_saved": False,
+    }
+
+    location_text = ft.Text(
+        "Tap a point on the map to pick the physical meeting location.",
+        size=16,
+        color="#4B5563",
+    )
+    save_notice = ft.Container(
+        visible=False,
+        padding=16,
+        border_radius=16,
+        bgcolor="#ECFDF3",
+        border=ft.Border.all(1, "#ABEFC6"),
+    )
+
+    lat = auth_input("Latitude", ft.Icons.MY_LOCATION)
+    lon = auth_input("Longitude", ft.Icons.PLACE)
+    address = auth_input("Meeting Address", ft.Icons.HOME, multiline=True)
+    address.min_lines = 2
+
+    lat.read_only = True
+    lon.read_only = True
 
     marker_layer = None
     map_control = None
+
     if ftm:
         marker_layer = ftm.MarkerLayer(markers=[])
 
         def handle_map_tap(e):
+            if not state["can_pin_location"]:
+                show_error(page, "This meeting is not ready for location pinning yet.")
+                return
+
             coordinates = e.coordinates
             lat.value = f"{coordinates.latitude:.6f}"
             lon.value = f"{coordinates.longitude:.6f}"
@@ -49,6 +86,69 @@ def map_view(page: ft.Page):
             ],
         )
 
+    async def load_meeting_context():
+        if not AppState.active_meeting_id:
+            location_text.value = "No active meeting selected."
+            page.update()
+            return
+
+        response = MeetingService.get_meeting_detail(AppState.active_meeting_id)
+        if response.status_code != 200:
+            location_text.value = "Could not load meeting details."
+            show_error(page, f"Could not load meeting details: {response.text}")
+            page.update()
+            return
+
+        meeting = response.json()
+        state["meeting_loaded"] = True
+        state["can_pin_location"] = bool(meeting.get("can_pin_location"))
+
+        if meeting.get("meeting_latitude") is not None:
+            lat.value = str(meeting.get("meeting_latitude"))
+        if meeting.get("meeting_longitude") is not None:
+            lon.value = str(meeting.get("meeting_longitude"))
+        address.value = meeting.get("meeting_address") or ""
+
+        if state["can_pin_location"]:
+            location_text.value = "Tap a point on the map to pick the physical meeting location."
+        elif lat.value and lon.value:
+            location_text.value = "A physical meeting point has already been pinned."
+        else:
+            location_text.value = "You can pin the location only after the online meeting is completed."
+            state["location_saved"] = False
+            save_notice.visible = False
+            save_notice.content = None
+
+        if lat.value and lon.value:
+            state["location_saved"] = True
+            save_notice.visible = True
+            save_notice.content = ft.Column(
+                [
+                    ft.Text(
+                        "Meeting Location Saved",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color="#166534",
+                    ),
+                    muted_text("A physical handoff point has already been saved for this meeting."),
+                ],
+                spacing=8,
+            )
+
+        if marker_layer and map_control and lat.value and lon.value:
+            point = ftm.MapLatitudeLongitude(float(lat.value), float(lon.value))
+            marker_layer.markers = [
+                ftm.Marker(
+                    coordinates=point,
+                    content=ft.Icon(ft.Icons.LOCATION_ON, color="#B42318"),
+                    width=40,
+                    height=40,
+                )
+            ]
+            await map_control.center_on(point, zoom=14)
+
+        page.update()
+
     async def get_location(e):
         try:
             response = requests.get("http://ip-api.com/json/", timeout=5)
@@ -60,6 +160,7 @@ def map_view(page: ft.Page):
                     [part for part in [data.get("city"), data.get("regionName"), data.get("country")] if part]
                 )
                 location_text.value = f"Suggested location: {address.value}"
+
                 if marker_layer and map_control and lat.value and lon.value:
                     point = ftm.MapLatitudeLongitude(float(lat.value), float(lon.value))
                     marker_layer.markers = [
@@ -72,17 +173,23 @@ def map_view(page: ft.Page):
                     ]
                     await map_control.center_on(point, zoom=14)
             else:
-                location_text.value = "Could not fetch location"
+                show_error(page, "Could not fetch current area.")
         except Exception as ex:
-            location_text.value = f"Error: {ex}"
+            show_error(page, f"Error: {ex}")
+
         page.update()
 
     def save_location(e):
         if not AppState.active_meeting_id:
-            show_message(page, "No active meeting selected.", "red")
+            show_error(page, "No active meeting selected.")
             return
+
+        if not state["can_pin_location"]:
+            show_error(page, "This meeting is not ready for location pinning.")
+            return
+
         if not lat.value or not lon.value:
-            show_message(page, "Pick a location on the map first.", "red")
+            show_error(page, "Pick a location on the map first.")
             return
 
         response = MeetingService.set_meeting_location(
@@ -93,14 +200,31 @@ def map_view(page: ft.Page):
         )
 
         if response.status_code == 200:
-            show_message(page, "Meeting point pinned for the NGO.", "green")
-            location_text.value = "Meeting location pinned."
+            state["can_pin_location"] = False
+            state["location_saved"] = True
+            show_success(page, "Meeting point pinned successfully.")
+            location_text.value = "Meeting location pinned successfully."
+            save_notice.visible = True
+            save_notice.content = ft.Column(
+                [
+                    ft.Text(
+                        "Meeting Location Saved",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color="#166534",
+                    ),
+                    muted_text("The meeting point is saved. Return to Meetings to continue the handoff workflow."),
+                ],
+                spacing=8,
+            )
             page.update()
         else:
-            show_message(page, f"Could not save meeting location: {response.text}", "red")
+            show_error(page, f"Could not save meeting location: {response.text}")
 
     async def go_back(e):
         await page.push_route("/meetings")
+
+    page.run_task(load_meeting_context)
 
     map_section_controls = []
     if map_control:
@@ -144,16 +268,37 @@ def map_view(page: ft.Page):
                             ft.Row([lat, lon], wrap=True, spacing=12),
                             ft.Row(
                                 [
-                                    ft.Button("Use My Current Area", on_click=get_location, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-                                    ft.Button("Save Meeting Location", on_click=save_location, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
+                                    secondary_button(
+                                        "Use My Current Area",
+                                        get_location,
+                                        width=190,
+                                        icon=ft.Icons.MY_LOCATION,
+                                    ),
+                                    primary_button(
+                                        "Save Meeting Location",
+                                        save_location,
+                                        width=220,
+                                        icon=ft.Icons.SAVE,
+                                    ),
                                 ],
                                 wrap=True,
                                 spacing=12,
                             ),
+                            save_notice,
+                            muted_text(
+                                "Either the donor or NGO can pin the physical handoff point after the online meeting is completed."
+                            ),
                         ],
                     ),
                     ft.Row(
-                        [ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT, width=140)],
+                        [
+                            secondary_button(
+                                "Back",
+                                go_back,
+                                width=140,
+                                icon=ft.Icons.ARROW_BACK,
+                            )
+                        ],
                         alignment=ft.MainAxisAlignment.END,
                     ),
                 ),

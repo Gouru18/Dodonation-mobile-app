@@ -23,6 +23,16 @@ def otp_view(page: ft.Page):
 
     otp_code = auth_input("OTP Code", ft.Icons.PIN)
 
+    async def load_pending_email():
+        if not email.value:
+            stored_email = await AuthService.get_pending_otp_email(page)
+            if stored_email:
+                AppState.pending_otp_email = stored_email
+                email.value = stored_email
+                page.update()
+
+    page.run_task(load_pending_email)
+
     def _extract_error_message(error_data):
         if isinstance(error_data, dict):
             if "message" in error_data:
@@ -51,6 +61,8 @@ def otp_view(page: ft.Page):
                 data = response.json()
 
                 if data.get("requires_admin_approval"):
+                    await AuthService.clear_pending_otp_email(page)
+                    AppState.pending_otp_email = None
                     AuthService.logout()
                     show_success(
                         page,
@@ -63,6 +75,10 @@ def otp_view(page: ft.Page):
                 else:
                     AuthService.set_user(data.get("user", {}))
                     AuthService.set_token(data.get("access"))
+                    await AuthService.persist_session(page)
+                    await AuthService.clear_pending_otp_email(page)
+                    AppState.pending_otp_email = None
+
                     show_success(page, "OTP verified successfully. You can now use the app.")
                     await page.push_route("/dashboard")
             else:
@@ -85,6 +101,7 @@ def otp_view(page: ft.Page):
             response = await asyncio.to_thread(AuthService.request_otp, email.value)
 
             if response.status_code == 200:
+                await AuthService.set_pending_otp_email(page, email.value)
                 show_success(page, "A new OTP has been sent.")
             else:
                 try:

@@ -1,6 +1,13 @@
 import flet as ft
 from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN
-from utils.helpers import auth_scaffold, form_container, role_card, subtle_text_button, muted_text
+from utils.helpers import (
+    auth_scaffold,
+    form_container,
+    role_card,
+    subtle_text_button,
+    muted_text,
+    status_chip,
+)
 
 
 def role_selection_view(page: ft.Page):
@@ -16,7 +23,11 @@ def role_selection_view(page: ft.Page):
     card = form_container(
         "Join Dodonation",
         [
-            muted_text("Choose the account type that best matches how you will use the app."),
+            muted_text(
+                "Choose the account type that best matches how you will use the app."
+            ),
+            status_chip("Donors can post donations and review claims", color="#027A48"),
+            status_chip("NGOs must upload a permit and wait for approval", color="#B54708"),
             role_card(
                 "Donor",
                 "Post donations, manage claims, schedule meetings, and set handoff locations.",

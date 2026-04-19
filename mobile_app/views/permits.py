@@ -1,26 +1,44 @@
 import asyncio
+import os
 import flet as ft
 
 from services.permit_service import PermitService
-from utils.constants import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
-from utils.helpers import build_appbar, centered_content, page_container, section_card, show_message
+from utils.helpers import (
+    build_appbar,
+    centered_content,
+    page_container,
+    section_card,
+    primary_button,
+    secondary_button,
+    muted_text,
+    status_chip,
+    show_error,
+    show_success,
+)
 
 
 def permits_view(page: ft.Page):
     permit_path = {"value": None}
     permit_file_label = ft.Text("No permit selected", color="#6B7280")
-    permit_status = ft.Text("")
+    permit_summary = ft.Text("", color="#4B5563")
     permit_list = ft.Column(spacing=10)
 
     def display_status(value):
         return PermitService.display_status(value)
 
+    def status_color(value):
+        normalized = (value or "").lower()
+        return {
+            "pending": "#B54708",
+            "approved": "#027A48",
+            "rejected": "#B42318",
+            "unknown": "#667085",
+        }.get(normalized, "#667085")
+
     def latest_status_label(permit):
         if not permit:
             return "unknown"
-        if permit.get("reviewed_at") or permit.get("status") in {"approved", "rejected"}:
-            return "Reviewed"
-        return display_status(permit.get("status", "unknown")).capitalize()
+        return (permit.get("status") or "unknown").lower()
 
     def sort_key(permit):
         return (
@@ -33,40 +51,103 @@ def permits_view(page: ft.Page):
         permit_list.controls.clear()
 
         if response.status_code != 200:
-            permit_status.value = f"Could not load permit info: {response.text}"
+            permit_summary.value = f"Could not load permit info: {response.text}"
             page.update()
             return
 
         permits = response.json()
+
         if not permits:
-            permit_status.value = "No permit uploaded yet."
+            permit_summary.value = "No permit uploaded yet."
         else:
             permits = sorted(permits, key=sort_key, reverse=True)
             latest = permits[0]
-            permit_status.value = f"Latest status: {latest_status_label(latest)}"
-            for permit in permits:
-                permit_list.controls.append(
-                    ft.Container(
-                        content=ft.Column(
-                            [
-                                ft.Text(f"Status: {display_status(permit.get('status', 'unknown'))}", weight=ft.FontWeight.BOLD),
-                                ft.Text(f"Submitted: {permit.get('submitted_at', '')}"),
-                                ft.Text(f"Rejection reason: {permit.get('rejection_reason') or 'None'}"),
-                            ],
-                            spacing=6,
-                        ),
-                        padding=12,
-                        border=ft.Border.all(1, "#d9d9d9"),
-                        border_radius=12,
-                        bgcolor="#FFFEFB",
-                    )
+            latest_status = latest_status_label(latest)
+
+            permit_summary.value = "Your latest permit submission is shown below."
+
+            permit_list.controls.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Text(
+                                        "Latest Permit Status",
+                                        size=18,
+                                        weight=ft.FontWeight.BOLD,
+                                        color="#1F2937",
+                                        expand=True,
+                                    ),
+                                    status_chip(
+                                        display_status(latest_status),
+                                        color=status_color(latest_status),
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            muted_text(f"Submitted: {latest.get('submitted_at', 'N/A')}"),
+                            muted_text(
+                                f"Reviewed: {latest.get('reviewed_at', 'Not reviewed yet')}"
+                            ),
+                            muted_text(
+                                f"Rejection reason: {latest.get('rejection_reason') or 'None'}"
+                            ),
+                        ],
+                        spacing=8,
+                    ),
+                    padding=16,
+                    border=ft.Border.all(1, "#D6E2D3"),
+                    border_radius=18,
+                    bgcolor="#FFFEFB",
                 )
+            )
+
+            if len(permits) > 1:
+                for permit in permits[1:]:
+                    status_value = (permit.get("status") or "unknown").lower()
+                    permit_list.controls.append(
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Row(
+                                        [
+                                            ft.Text(
+                                                "Previous Submission",
+                                                weight=ft.FontWeight.BOLD,
+                                                color="#1F2937",
+                                                expand=True,
+                                            ),
+                                            status_chip(
+                                                display_status(status_value),
+                                                color=status_color(status_value),
+                                            ),
+                                        ],
+                                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                    ),
+                                    muted_text(f"Submitted: {permit.get('submitted_at', 'N/A')}"),
+                                    muted_text(
+                                        f"Reviewed: {permit.get('reviewed_at', 'Not reviewed yet')}"
+                                    ),
+                                    muted_text(
+                                        f"Rejection reason: {permit.get('rejection_reason') or 'None'}"
+                                    ),
+                                ],
+                                spacing=6,
+                            ),
+                            padding=14,
+                            border=ft.Border.all(1, "#D6E2D3"),
+                            border_radius=16,
+                            bgcolor="#FFFFFF",
+                        )
+                    )
+
         page.update()
 
     async def choose_permit(e):
         def choose_file():
             try:
-                import os
                 import tkinter as tk
                 from tkinter import filedialog
 
@@ -86,27 +167,32 @@ def permits_view(page: ft.Page):
                 return None
 
         file_path = await asyncio.to_thread(choose_file)
+
         if file_path:
-            import os
             permit_path["value"] = file_path
             permit_file_label.value = os.path.basename(file_path)
         else:
             permit_file_label.value = "No permit selected"
+
         page.update()
 
     async def upload_permit(e):
         if not permit_path["value"]:
-            show_message(page, "Choose a permit file first.", "red")
+            show_error(page, "Choose a permit file first.")
             return
 
-        response = await asyncio.to_thread(PermitService.upload_permit, permit_path["value"])
+        response = await asyncio.to_thread(
+            PermitService.upload_permit,
+            permit_path["value"],
+        )
+
         if response.status_code in (200, 201):
-            show_message(page, "Permit uploaded.", "green")
+            show_success(page, "Permit uploaded.")
             permit_path["value"] = None
             permit_file_label.value = "No permit selected"
             load_permits()
         else:
-            show_message(page, f"Could not upload permit: {response.text}", "red")
+            show_error(page, f"Could not upload permit: {response.text}")
 
     async def go_back(e):
         await page.push_route("/dashboard")
@@ -120,32 +206,71 @@ def permits_view(page: ft.Page):
             page_container(
                 centered_content(
                     section_card(
-                        "Permit Status",
+                        "Permit Upload",
                         [
-                            permit_status,
-                            ft.Row(
-                                [
-                                    ft.Button("Choose Permit", on_click=choose_permit, bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-                                    permit_file_label,
-                                ],
-                                wrap=True,
-                                spacing=12,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            muted_text(
+                                "Upload the registration permit that admins will review before activating the NGO account."
                             ),
-                            ft.Row(
-                                [
-                                    ft.Button("Upload Permit", on_click=upload_permit, bgcolor=PRIMARY_GREEN, color=BUTTON_TEXT),
-                                    ft.Button("Refresh", on_click=lambda e: load_permits(), bgcolor=SECONDARY_GREEN, color=BUTTON_TEXT),
-                                ],
-                                wrap=True,
-                                spacing=12,
+                            permit_summary,
+                            ft.Container(
+                                padding=16,
+                                border_radius=16,
+                                bgcolor="#FFFFFF",
+                                border=ft.Border.all(1, "#D6E2D3"),
+                                content=ft.Column(
+                                    [
+                                        ft.Row(
+                                            [
+                                                secondary_button(
+                                                    "Choose Permit",
+                                                    choose_permit,
+                                                    width=170,
+                                                    icon=ft.Icons.UPLOAD_FILE,
+                                                ),
+                                                permit_file_label,
+                                            ],
+                                            wrap=True,
+                                            spacing=12,
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                        ),
+                                        ft.Row(
+                                            [
+                                                primary_button(
+                                                    "Upload Permit",
+                                                    upload_permit,
+                                                    width=170,
+                                                    icon=ft.Icons.CLOUD_UPLOAD,
+                                                ),
+                                                secondary_button(
+                                                    "Refresh",
+                                                    lambda e: load_permits(),
+                                                    width=140,
+                                                    icon=ft.Icons.REFRESH,
+                                                ),
+                                            ],
+                                            wrap=True,
+                                            spacing=12,
+                                        ),
+                                    ],
+                                    spacing=12,
+                                ),
                             ),
                         ],
-                        subtitle="Upload the registration permit that admins will review before activating the NGO account.",
                     ),
-                    section_card("Previous Submissions", [permit_list]),
+                    section_card(
+                        "Permit History",
+                        [permit_list],
+                        subtitle="Previous submissions and review results are shown below.",
+                    ),
                     ft.Row(
-                        [ft.Button("Back", on_click=go_back, bgcolor="#666666", color=BUTTON_TEXT, width=140)],
+                        [
+                            secondary_button(
+                                "Back",
+                                go_back,
+                                width=140,
+                                icon=ft.Icons.ARROW_BACK,
+                            )
+                        ],
                         alignment=ft.MainAxisAlignment.END,
                     ),
                 ),

@@ -76,6 +76,9 @@ def auth_input(label, icon=None, password=False, multiline=False):
         border_radius=RADIUS_SM,
         filled=True,
         bgcolor=INPUT_BG,
+        border_color=CARD_BORDER,
+        focused_border_color=PRIMARY_GREEN,
+        content_padding=ft.Padding.symmetric(horizontal=14, vertical=14),
     )
 
 
@@ -83,8 +86,8 @@ def helper_text(text):
     return ft.Text(text, size=14, color=TEXT_SECONDARY)
 
 
-def muted_text(text, size=13):
-    return ft.Text(text, size=size, color=TEXT_MUTED)
+def muted_text(text, size=13, text_align=None):
+    return ft.Text(text, size=size, color=TEXT_MUTED, text_align=text_align)
 
 
 def section_header(title, subtitle=None):
@@ -210,6 +213,12 @@ def section_card(title, controls, subtitle=None):
         bgcolor=CARD_BG,
         border=ft.Border.all(1, CARD_BORDER),
         border_radius=20,
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=10,
+            color="#00000008",
+            offset=ft.Offset(0, 4),
+        ),
         content=ft.Column(items, spacing=14),
     )
 
@@ -224,7 +233,7 @@ def role_card(title, description, icon, on_click, accent):
             [
                 ft.Icon(icon, size=34, color=accent),
                 ft.Text(title, size=18, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
-                ft.Text(description, size=13, color=TEXT_MUTED),
+                ft.Text(description, size=13, color=TEXT_MUTED, text_align=ft.TextAlign.CENTER),
                 ft.Container(height=6),
                 ft.Button(
                     f"Continue as {title}",
@@ -253,10 +262,28 @@ def status_chip(text, color=INFO):
     )
 
 
+def empty_state(message, icon=ft.Icons.INFO_OUTLINE):
+    return ft.Container(
+        padding=20,
+        border_radius=16,
+        bgcolor="#FFFFFF",
+        border=ft.Border.all(1, CARD_BORDER),
+        content=ft.Column(
+            [
+                ft.Icon(icon, size=34, color=TEXT_MUTED),
+                ft.Text(message, color=TEXT_MUTED, text_align=ft.TextAlign.CENTER),
+            ],
+            spacing=10,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    )
+
+
 def show_message(page, msg, color="green"):
     page.snack_bar = ft.SnackBar(
         ft.Text(msg, color="white"),
-        bgcolor=color
+        bgcolor=color,
+        behavior=ft.SnackBarBehavior.FLOATING,
     )
     page.snack_bar.open = True
     page.update()

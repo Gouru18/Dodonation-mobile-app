@@ -6,7 +6,6 @@ from django.db.models import Q
 
 from .models import Meeting
 from .serializers import MeetingSerializer
-from .google_meet import GoogleMeetError, create_google_meet_space
 from donations.models import ClaimRequest
 
 
@@ -17,9 +16,15 @@ class MeetingViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         status_value = self.request.query_params.get('status')
+
         queryset = Meeting.objects.filter(
             Q(claim_request__donation__donor=user) | Q(claim_request__receiver=user)
-        ).select_related('claim_request')
+        ).select_related(
+            'claim_request',
+            'claim_request__donation',
+            'claim_request__receiver',
+            'claim_request__donation__donor',
+        )
 
         if status_value:
             queryset = queryset.filter(status=status_value)
@@ -27,74 +32,74 @@ class MeetingViewSet(viewsets.ModelViewSet):
         return queryset
 
     def create(self, request, *args, **kwargs):
-        """Donor schedules an online Google Meet after accepting a claim."""
+        if getattr(request.user, "role", "") != "donor":
+            return Response(
+                {'error': 'Only donors can schedule meetings.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         claim_id = request.data.get('claim_request')
-        
+        scheduled_time = request.data.get('scheduled_time')
+        meeting_link = request.data.get('meeting_link')
+
+        if not claim_id or not scheduled_time or not meeting_link:
+            return Response(
+                {'error': 'claim_request, scheduled_time, and meeting_link are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if "meet.google.com" not in str(meeting_link).lower():
+            return Response(
+                {'error': 'Please provide a valid Google Meet link.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             claim = ClaimRequest.objects.get(id=claim_id, status='accepted')
         except ClaimRequest.DoesNotExist:
             return Response(
-                {'error': 'Claim request not found or not accepted'},
+                {'error': 'Claim request not found or not accepted.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
         if request.user != claim.donation.donor:
             return Response(
-                {'error': 'Only the donor can schedule the Google Meet.'},
+                {'error': 'Only the donor can schedule the meeting.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
         if Meeting.objects.filter(claim_request=claim).exists():
             return Response(
-                {'error': 'Meeting already exists for this claim'},
+                {'error': 'Meeting already exists for this claim.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        scheduled_time = request.data.get('scheduled_time')
-        if not scheduled_time:
-            return Response(
-                {'error': 'scheduled_time is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer = self.get_serializer(
-            data={'scheduled_time': scheduled_time},
-            context={'claim_request': claim}
-        )
+        serializer = self.get_serializer(data={
+            'claim_request': claim.id,
+            'scheduled_time': scheduled_time,
+            'meeting_link': meeting_link,
+            'status': 'online_scheduled',
+        })
         serializer.is_valid(raise_exception=True)
-
-        try:
-            meet_space = create_google_meet_space()
-        except GoogleMeetError as exc:
-            return Response(
-                {'error': f'Google Meet scheduling failed: {exc}'},
-                status=status.HTTP_502_BAD_GATEWAY
-            )
-        except Exception:
-            return Response(
-                {'error': 'Google Meet is not configured. Set Google application credentials for the backend.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        meeting = serializer.save(
-            meeting_link=meet_space.get('meeting_uri'),
-            google_meet_space_name=meet_space.get('space_name'),
-            status='online_scheduled',
-        )
+        meeting = serializer.save()
 
         return Response(self.get_serializer(meeting).data, status=status.HTTP_201_CREATED)
 
     def perform_update(self, serializer):
         meeting = self.get_object()
+
         if self.request.user != meeting.claim_request.donation.donor:
             raise permissions.PermissionDenied("Only the donor can update this meeting")
+
         if meeting.status != 'online_scheduled':
-            raise permissions.PermissionDenied("Meeting can only be updated before the online meeting is completed")
+            raise permissions.PermissionDenied(
+                "Meeting can only be updated before the online meeting is completed"
+            )
+
         serializer.save()
 
     @action(detail=True, methods=['post'])
     def complete_online(self, request, pk=None):
-        """Mark the online Google Meet as completed."""
         meeting = self.get_object()
 
         if request.user != meeting.claim_request.donation.donor:
@@ -109,21 +114,29 @@ class MeetingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        if meeting.scheduled_time and meeting.scheduled_time < timezone.now():
+            return Response(
+                {'error': 'This online meeting time has passed. Please reschedule a new meeting link.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         meeting.status = 'online_completed'
         meeting.online_meeting_completed_at = timezone.now()
         meeting.save(update_fields=['status', 'online_meeting_completed_at', 'updated_at'])
 
-        serializer = self.get_serializer(meeting)
-        return Response(serializer.data)
+        return Response(self.get_serializer(meeting).data)
 
     @action(detail=True, methods=['post'])
     def pin_location(self, request, pk=None):
-        """Pin the physical meeting point after the online meeting is completed."""
         meeting = self.get_object()
 
-        if request.user != meeting.claim_request.donation.donor:
+        allowed_users = {
+            meeting.claim_request.donation.donor_id,
+            meeting.claim_request.receiver_id,
+        }
+        if request.user.id not in allowed_users:
             return Response(
-                {'error': 'Only the donor can pin the meeting point'},
+                {'error': 'Only the donor or NGO linked to this meeting can pin the meeting point'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -159,12 +172,10 @@ class MeetingViewSet(viewsets.ModelViewSet):
             ]
         )
 
-        serializer = self.get_serializer(meeting)
-        return Response(serializer.data)
+        return Response(self.get_serializer(meeting).data)
 
     @action(detail=True, methods=['post'])
     def complete_physical(self, request, pk=None):
-        """Mark the physical handoff as completed and clear the map point."""
         meeting = self.get_object()
 
         if request.user != meeting.claim_request.donation.donor:
@@ -181,22 +192,15 @@ class MeetingViewSet(viewsets.ModelViewSet):
 
         meeting.status = 'physical_completed'
         meeting.physical_meeting_completed_at = timezone.now()
-        meeting.meeting_latitude = None
-        meeting.meeting_longitude = None
-        meeting.meeting_address = None
         meeting.save(
             update_fields=[
                 'status',
                 'physical_meeting_completed_at',
-                'meeting_latitude',
-                'meeting_longitude',
-                'meeting_address',
                 'updated_at',
             ]
         )
 
         meeting.claim_request.donation.status = 'completed'
-        meeting.claim_request.donation.save()
+        meeting.claim_request.donation.save(update_fields=['status'])
 
-        serializer = self.get_serializer(meeting)
-        return Response(serializer.data)
+        return Response(self.get_serializer(meeting).data)

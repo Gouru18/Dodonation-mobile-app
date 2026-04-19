@@ -31,45 +31,52 @@ CATEGORY_OPTIONS = [
     ft.dropdown.Option("other"),
 ]
 
+FILTER_CATEGORY_OPTIONS = [
+    ft.dropdown.Option(key="all", text="All Categories"),
+    ft.dropdown.Option(key="food", text="Food"),
+    ft.dropdown.Option(key="clothing", text="Clothing"),
+    ft.dropdown.Option(key="medical", text="Medical"),
+    ft.dropdown.Option(key="books", text="Books"),
+    ft.dropdown.Option(key="furniture", text="Furniture"),
+    ft.dropdown.Option(key="electronics", text="Electronics"),
+    ft.dropdown.Option(key="other", text="Other"),
+]
+
 
 def donations_view(page: ft.Page):
     is_donor = AuthService.user and AuthService.user.get("role") == "donor"
     donations_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
     media_base_url = BASE_URL.rsplit("/api", 1)[0]
     image_fit_cover = getattr(getattr(ft, "ImageFit", None), "COVER", "cover")
+    donor_edit_state = {}
+    claim_notice_state = {"token": 0}
+    selected_category_filter = {"value": "all"}
+    claim_notice = ft.Container(
+        visible=False,
+        padding=16,
+        border_radius=16,
+        bgcolor="#ECFDF3",
+        border=ft.Border.all(1, "#ABEFC6"),
+    )
+    category_filter = ft.Dropdown(
+        label="Filter by Category",
+        options=FILTER_CATEGORY_OPTIONS,
+        value="all",
+        border_radius=14,
+        filled=True,
+        bgcolor="white",
+        width=220,
+    )
 
-    def show_claim_sent_alert():
-        dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Claim Request Sent"),
-            content=ft.Text("Your claim request has been sent to the donor successfully."),
-            actions=[
-                ft.TextButton(
-                    "OK",
-                    on_click=lambda e: close_claim_sent_alert(dialog),
-                )
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        if hasattr(page, "open"):
-            page.open(dialog)
-            return
-
-        page.dialog = dialog
-        if hasattr(page, "overlay") and dialog not in page.overlay:
-            page.overlay.append(dialog)
-        dialog.open = True
+    def hide_claim_notice():
+        claim_notice.visible = False
+        claim_notice.content = None
         page.update()
 
-    def close_claim_sent_alert(dialog):
-        if hasattr(page, "close"):
-            page.close(dialog)
-            return
-
-        dialog.open = False
-        if hasattr(page, "overlay") and dialog in page.overlay:
-            page.overlay.remove(dialog)
-        page.update()
+    async def auto_hide_claim_notice(token):
+        await asyncio.sleep(4)
+        if claim_notice_state["token"] == token:
+            hide_claim_notice()
 
     title = auth_input("Title", ft.Icons.TITLE)
     description = auth_input("Description", ft.Icons.DESCRIPTION, multiline=True)
@@ -106,25 +113,70 @@ def donations_view(page: ft.Page):
         return normalized_status
 
     def donor_feed_status(item):
-        normalized_status = (item.get("feed_status") or item.get("status") or "available").strip().lower()
+        normalized_status = (
+            item.get("feed_status") or item.get("status") or "available"
+        ).strip().lower()
+
+        if normalized_status == "pending":
+            return "available"
+
         if normalized_status == "completed":
             return "claimed"
+
         if normalized_status == "expired":
             return "rejected"
+
+        if normalized_status not in {"available", "claimed", "rejected"}:
+            return "available"
+
         return normalized_status
 
     def status_color(status):
         return {
             "available": "#027A48",
+            "pending": "#B54708",
             "claimed": "#1D4ED8",
             "expired": "#B54708",
             "rejected": "#B42318",
         }.get(status, "#667085")
 
+    def get_donor_edit_state(item):
+        donation_id = item["id"]
+        state = donor_edit_state.get(donation_id)
+        if state is None:
+            state = {
+                "is_editing": False,
+                "title": item.get("title", ""),
+                "description": item.get("description", ""),
+                "category": item.get("category", "other"),
+                "quantity": str(item.get("quantity", 1)),
+                "expiry_date": item.get("expiry_date") or "",
+                "image_path": None,
+                "image_label": "Keep current image",
+                "confirming_delete": False,
+            }
+            donor_edit_state[donation_id] = state
+        return state
+
+    def reset_donor_edit_state(item):
+        donation_id = item["id"]
+        donor_edit_state[donation_id] = {
+            "is_editing": False,
+            "title": item.get("title", ""),
+            "description": item.get("description", ""),
+            "category": item.get("category", "other"),
+            "quantity": str(item.get("quantity", 1)),
+            "expiry_date": item.get("expiry_date") or "",
+            "image_path": None,
+            "image_label": "Keep current image",
+            "confirming_delete": False,
+        }
+
     def donation_card(item):
         donor_data = item.get("donor") or {}
         status = donor_feed_status(item) if is_donor else display_status(item.get("status"))
         image_src = resolve_image_src(item)
+        edit_state = get_donor_edit_state(item)
 
         controls = [
             ft.Text(
@@ -157,35 +209,243 @@ def donations_view(page: ft.Page):
 
         controls.extend(
             [
-            ft.Row(
-                [
-                    status_chip(f"Category: {item.get('category', 'n/a')}", color="#1D4ED8"),
-                    status_chip(f"Qty: {item.get('quantity', 1)}", color="#027A48"),
-                    status_chip(f"Status: {status}", color=status_color(status)),
-                ],
-                wrap=True,
-                spacing=8,
-            ),
-            muted_text(f"Donor: {donor_data.get('email', 'Unknown')}"),
+                ft.Row(
+                    [
+                        status_chip(f"Category: {item.get('category', 'n/a')}", color="#1D4ED8"),
+                        status_chip(f"Qty: {item.get('quantity', 1)}", color="#027A48"),
+                        status_chip(f"Status: {status}", color=status_color(status)),
+                    ],
+                    wrap=True,
+                    spacing=8,
+                ),
+                muted_text(f"Donor: {donor_data.get('email', 'Unknown')}"),
             ]
         )
 
         if is_donor:
-            controls.append(
-                muted_text(f"Coordinates: {item.get('latitude')}, {item.get('longitude')}")
+            title_field = auth_input("Title", ft.Icons.TITLE)
+            title_field.value = edit_state["title"]
+            description_field = auth_input("Description", ft.Icons.DESCRIPTION, multiline=True)
+            description_field.value = edit_state["description"]
+            category_field = ft.Dropdown(
+                label="Category",
+                options=CATEGORY_OPTIONS,
+                value=edit_state["category"],
+                border_radius=14,
+                filled=True,
+                bgcolor="white",
             )
+            quantity_field = auth_input("Quantity", ft.Icons.NUMBERS)
+            quantity_field.value = edit_state["quantity"]
+            expiry_field = auth_input("Expiry Date (YYYY-MM-DD)", ft.Icons.CALENDAR_MONTH)
+            expiry_field.value = edit_state["expiry_date"]
+            edit_image_label = ft.Text(edit_state["image_label"], color="#6B7280")
+
+            async def pick_edit_image(e, state=edit_state, label=edit_image_label):
+                def choose_file():
+                    try:
+                        import tkinter as tk
+                        from tkinter import filedialog
+
+                        root = tk.Tk()
+                        root.withdraw()
+                        root.attributes("-topmost", True)
+                        file_path = filedialog.askopenfilename(
+                            title="Choose updated donation image",
+                            filetypes=[
+                                ("Image files", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
+                                ("All files", "*.*"),
+                            ],
+                        )
+                        root.destroy()
+                        return file_path
+                    except Exception:
+                        return None
+
+                file_path = await asyncio.to_thread(choose_file)
+                if file_path:
+                    state["image_path"] = file_path
+                    state["image_label"] = os.path.basename(file_path)
+                label.value = state["image_label"]
+                page.update()
+
+            def begin_edit(e, state=edit_state, current_item=item):
+                reset_donor_edit_state(current_item)
+                donor_edit_state[current_item["id"]]["is_editing"] = True
+                page.run_task(load_donations)
+
+            def cancel_edit(e, state=edit_state, current_item=item):
+                reset_donor_edit_state(current_item)
+                page.run_task(load_donations)
+
+            async def save_edit(
+                e,
+                donation_id=item["id"],
+                state=edit_state,
+                title_control=title_field,
+                description_control=description_field,
+                category_control=category_field,
+                quantity_control=quantity_field,
+                expiry_control=expiry_field,
+            ):
+                try:
+                    quantity_value = int(quantity_control.value or "1")
+                except ValueError:
+                    show_error(page, "Quantity must be a number.")
+                    return
+
+                state["title"] = title_control.value or ""
+                state["description"] = description_control.value or ""
+                state["category"] = category_control.value or "other"
+                state["quantity"] = str(quantity_value)
+                state["expiry_date"] = expiry_control.value or ""
+
+                response = await asyncio.to_thread(
+                    DonationService.update_donation,
+                    donation_id,
+                    title=state["title"],
+                    description=state["description"],
+                    category=state["category"],
+                    quantity=quantity_value,
+                    expiry_date=state["expiry_date"] or None,
+                    image=state["image_path"],
+                )
+
+                if response.status_code in (200, 202):
+                    show_success(page, "Donation updated successfully.")
+                    state["is_editing"] = False
+                    state["image_path"] = None
+                    state["image_label"] = "Keep current image"
+                    await load_donations()
+                else:
+                    show_error(page, f"Could not update donation: {response.text}")
+
+            def confirm_delete(e, state=edit_state):
+                state["confirming_delete"] = True
+                page.run_task(load_donations)
+
+            def cancel_delete(e, state=edit_state):
+                state["confirming_delete"] = False
+                page.run_task(load_donations)
+
+            if edit_state["is_editing"]:
+                controls.extend(
+                    [
+                        muted_text("Update your donation post below."),
+                        title_field,
+                        description_field,
+                        category_field,
+                        quantity_field,
+                        expiry_field,
+                        ft.Container(
+                            padding=16,
+                            border_radius=16,
+                            bgcolor="#FFFFFF",
+                            border=ft.Border.all(1, "#D6E2D3"),
+                            content=ft.Column(
+                                [
+                                    muted_text("Choose a new image only if you want to replace the current one."),
+                                    ft.Row(
+                                        [
+                                            secondary_button(
+                                                "Replace Image",
+                                                pick_edit_image,
+                                                width=170,
+                                                icon=ft.Icons.UPLOAD_FILE,
+                                            ),
+                                            edit_image_label,
+                                        ],
+                                        wrap=True,
+                                        spacing=12,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ),
+                                ],
+                                spacing=12,
+                            ),
+                        ),
+                        ft.Row(
+                            [
+                                primary_button("Save Changes", save_edit, width=180, icon=ft.Icons.SAVE),
+                                secondary_button("Cancel", cancel_edit, width=140, icon=ft.Icons.CLOSE),
+                            ],
+                            wrap=True,
+                            spacing=12,
+                        ),
+                    ]
+                )
+            else:
+                controls.extend(
+                    [
+                        muted_text(f"Coordinates: {item.get('latitude')}, {item.get('longitude')}"),
+                    ]
+                )
+                if edit_state["confirming_delete"]:
+                    controls.append(
+                        ft.Container(
+                            padding=16,
+                            border_radius=16,
+                            bgcolor="#FFF4F2",
+                            border=ft.Border.all(1, "#F3C7C0"),
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        "Delete Donation",
+                                        size=16,
+                                        weight=ft.FontWeight.BOLD,
+                                        color="#7A271A",
+                                    ),
+                                    muted_text("Delete this donation post permanently?"),
+                                    ft.Row(
+                                        [
+                                            secondary_button(
+                                                "Cancel",
+                                                cancel_delete,
+                                                width=140,
+                                                icon=ft.Icons.CLOSE,
+                                            ),
+                                            secondary_button(
+                                                "Delete",
+                                                lambda e, donation_id=item["id"]: page.run_task(delete_donation, donation_id),
+                                                width=140,
+                                                icon=ft.Icons.DELETE,
+                                            ),
+                                        ],
+                                        wrap=True,
+                                        spacing=12,
+                                    ),
+                                ],
+                                spacing=12,
+                            ),
+                        )
+                    )
+                else:
+                    controls.append(
+                        ft.Row(
+                            [
+                                secondary_button("Edit Post", begin_edit, width=160, icon=ft.Icons.EDIT),
+                                secondary_button("Delete Post", confirm_delete, width=160, icon=ft.Icons.DELETE),
+                            ],
+                            wrap=True,
+                            spacing=12,
+                        )
+                    )
         else:
             message_field = auth_input("Claim message", ft.Icons.CHAT, multiline=True)
 
             def handle_claim_click(e, donation_id=item["id"], field=message_field):
                 page.run_task(claim_donation, donation_id, field)
 
-            controls.extend(
-                [
-                    message_field,
-                    secondary_button("Claim Donation", handle_claim_click, width=220, icon=ft.Icons.SEND),
-                ]
-            )
+            if status == "available":
+                controls.extend(
+                    [
+                        message_field,
+                        secondary_button("Claim Donation", handle_claim_click, width=220, icon=ft.Icons.SEND),
+                    ]
+                )
+            else:
+                controls.append(
+                    muted_text("This donation is not available for claiming.")
+                )
 
         return ft.Container(
             content=ft.Column(controls, spacing=10),
@@ -196,8 +456,13 @@ def donations_view(page: ft.Page):
         )
 
     async def load_donations():
+        category_filter_value = selected_category_filter["value"]
+        category_param = None if category_filter_value == "all" else category_filter_value
         response = await asyncio.to_thread(
-            DonationService.get_donations if is_donor else (lambda: DonationService.get_donations(status="pending"))
+            lambda: DonationService.get_donations(
+                category=category_param,
+                status=None if is_donor else "pending",
+            )
         )
         donations_column.controls.clear()
 
@@ -215,6 +480,18 @@ def donations_view(page: ft.Page):
             for item in items:
                 donations_column.controls.append(donation_card(item))
         page.update()
+
+    def apply_category_filter(e):
+        selected_category_filter["value"] = category_filter.value or "all"
+        page.run_task(load_donations)
+
+    category_filter.on_change = apply_category_filter
+
+    def refresh_feed(e):
+        hide_claim_notice()
+        category_filter.value = "all"
+        selected_category_filter["value"] = "all"
+        page.run_task(load_donations)
 
     async def pick_image(e):
         def choose_file():
@@ -286,10 +563,35 @@ def donations_view(page: ft.Page):
         if response.status_code in (200, 201):
             show_success(page, "Claim request sent.")
             message_field.value = ""
+            claim_notice_state["token"] += 1
+            claim_notice.visible = True
+            claim_notice.content = ft.Column(
+                [
+                    ft.Text(
+                        "Claim Request Sent",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color="#166534",
+                    ),
+                    muted_text("Your request has been sent to the donor. You can track it from My Claims."),
+                ],
+                spacing=8,
+            )
             await load_donations()
-            show_claim_sent_alert()
+            page.run_task(auto_hide_claim_notice, claim_notice_state["token"])
         else:
             show_error(page, f"Could not claim donation: {response.text}")
+
+    async def delete_donation(donation_id):
+        response = await asyncio.to_thread(DonationService.delete_donation, donation_id)
+        if response.status_code in (200, 202, 204):
+            donor_edit_state.pop(donation_id, None)
+            show_success(page, "Donation deleted successfully.")
+            await load_donations()
+        else:
+            if donation_id in donor_edit_state:
+                donor_edit_state[donation_id]["confirming_delete"] = False
+            show_error(page, f"Could not delete donation: {response.text}")
 
     async def go_back(e):
         await page.push_route("/dashboard")
@@ -344,7 +646,7 @@ def donations_view(page: ft.Page):
 
     feed_title = "All Donation Posts" if is_donor else "Available Donations"
     feed_subtitle = (
-        "Browse all donation posts. Donors can review statuses but cannot claim."
+        "Browse all donation posts and track their status: available, pending, claimed, or rejected."
         if is_donor
         else "Browse active donations and send a claim request."
     )
@@ -362,9 +664,10 @@ def donations_view(page: ft.Page):
                             ft.Row(
                                 [
                                     muted_text(feed_subtitle),
+                                    category_filter,
                                     secondary_button(
                                         "Refresh",
-                                        lambda e: page.run_task(load_donations),
+                                        refresh_feed,
                                         width=140,
                                         icon=ft.Icons.REFRESH,
                                     ),
@@ -373,6 +676,7 @@ def donations_view(page: ft.Page):
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 wrap=True,
                             ),
+                            claim_notice,
                             donations_column,
                         ],
                     ),

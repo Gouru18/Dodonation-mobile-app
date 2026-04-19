@@ -53,6 +53,7 @@ def login_view(page: ft.Page):
                 data = response.json()
                 AuthService.set_token(data.get("access"))
                 AuthService.set_user(data.get("user", {}))
+                await AuthService.persist_session(page)
                 show_success(page, "Login successful")
 
                 user = data.get("user", {}) or {}
