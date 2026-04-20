@@ -2,9 +2,9 @@
 import re
 
 import flet as ft
-from auth_api import register_user
-from helpers import show_message, clear_page, form_container
-from config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
+from dodonation_app.auth_api import register_user
+from dodonation_app.helpers import show_message, clear_page, form_container
+from dodonation_app.config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT, INPUT_TEXT
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 

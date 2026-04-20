@@ -1,5 +1,5 @@
 import requests
-from config import BASE_URL
+from dodonation_app.config import BASE_URL
 
 TIMEOUT = 5  # seconds
 

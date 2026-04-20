@@ -1,10 +1,10 @@
 import flet as ft
 
-from screens.login import login_screen
-from screens.register import register_screen
-from screens.role_selection import role_selection_screen
-from screens.otp import otp_screen
-from screens.dashboard import dashboard_screen
+from dodonation_app.screens.login import login_screen
+from dodonation_app.screens.register import register_screen
+from dodonation_app.screens.role_selection import role_selection_screen
+from dodonation_app.screens.otp import otp_screen
+from dodonation_app.screens.dashboard import dashboard_screen
 
 def main(page: ft.Page):
 

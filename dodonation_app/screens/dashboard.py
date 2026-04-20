@@ -1,7 +1,7 @@
 # pylint: disable=E1121, E1123
 import flet as ft
-from helpers import clear_page
-from config import PRIMARY_GREEN, SECONDARY_GREEN, BUTTON_TEXT
+from dodonation_app.helpers import clear_page
+from dodonation_app.config import PRIMARY_GREEN, BUTTON_TEXT
 
 def dashboard_screen(page, logout):
     clear_page(page)
