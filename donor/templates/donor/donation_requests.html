@@ -2,65 +2,106 @@
 {% block content %}
 <h2 style="text-align:center; color: var(--dark-green); margin-bottom: 2rem;">Donation Requests</h2>
 
-{% if requests %}
-<div style="overflow-x:auto; max-width: 1000px; margin: 0 auto;">
-<table class="table" style="width:100%; border-collapse: collapse; background-color:#fdf6e3; box-shadow:0 3px 6px rgba(0,0,0,0.1); border-radius:8px;">
-    <thead style="background-color: var(--dark-green); color: white;">
-        <tr style="text-align: center;">
-            <th style="padding:0.75rem; text-align:center; vertical-align:middle;">Donation</th>
-            <th style="padding:0.75rem; text-align:center; vertical-align:middle;">NGO</th>
-            <th style="padding:0.75rem; text-align:center; vertical-align:middle;">Status</th>
-            <th style="padding:0.75rem; text-align:center; vertical-align:middle;">Requested At</th>
-            <th style="padding:0.75rem; text-align:center; vertical-align:middle;">Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for req in requests %}
-        <tr style="text-align:center; border-bottom:1px solid #ddd;">
-            <td style="padding:0.75rem;">{{ req.donation.title }}</td>
-            <td style="padding:0.75rem;">
-                {% if req.receiver %}
-                    {{ req.receiver.name }} ({{ req.receiver.user.username }})
-                {% else %}
-                    <span style="color:red;">No NGO linked</span>
-                {% endif %}
-            </td>
-            <td style="padding:0.75rem;">
-                {% if req.status == 'pending' %}
-                    <span style="color:orange; font-weight:bold;">Pending</span>
-                {% elif req.status == 'accepted' %}
-                    <span style="color:green; font-weight:bold;">Accepted</span>
-                {% elif req.status == 'rejected' %}
-                    <span style="color:red; font-weight:bold;">Rejected</span>
-                {% else %}
-                    {{ req.get_status_display }}
-                {% endif %}
-            </td>
-            
-            <td style="padding:0.75rem;">{{ req.date_requested|date:"Y-m-d H:i" }}</td>
-            <td style="padding:0.75rem;">
-                {% if req.status == 'pending' %}
-                <form method="POST" style="display:inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="request_id" value="{{ req.id }}">
-                    <button type="submit" name="action" value="accept" class="btn btn-success">Accept</button>
-                    <button type="submit" name="action" value="reject" class="btn btn-danger">Reject</button>
-                </form>
-                {% else %}
-                    <em>{{ req.get_status_display }}</em>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div id="requests-wrapper" style="overflow-x:auto; max-width: 1000px; margin: 0 auto;">
+    <table id="requests-table" class="table" style="width:100%; border-collapse: collapse; background-color:#fdf6e3; box-shadow:0 3px 6px rgba(0,0,0,0.1); border-radius:8px;">
+        <thead style="background-color: var(--dark-green); color: white;">
+            <tr style="text-align: center;">
+                <th style="padding:0.75rem;">Donation</th>
+                <th style="padding:0.75rem;">NGO</th>
+                <th style="padding:0.75rem;">Status</th>
+                <th style="padding:0.75rem;">Requested At</th>
+                <th style="padding:0.75rem;">Action</th>
+            </tr>
+        </thead>
+        <tbody id="requests-body">
+            </tbody>
+    </table>
+    <p id="no-requests-msg" style="text-align:center; margin-top:2rem; display:none;">No requests yet.</p>
 </div>
-{% else %}
-<p style="text-align:center; margin-top:2rem;">No requests yet.</p>
-{% endif %}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    
+    // Fetch and display claim requests
+    function fetchRequests() {
+        $.ajax({
+            url: '/api/core/claim-requests/', 
+            type: 'GET',
+            success: function(data) {
+                let tbody = $('#requests-body');
+                tbody.empty();
+
+                if (data.length === 0) {
+                    $('#requests-table').hide();
+                    $('#no-requests-msg').show();
+                    return;
+                }
+
+                $('#requests-table').show();
+                $('#no-requests-msg').hide();
+
+                data.forEach(function(req) {
+                    let statusHtml = '';
+                    let actionHtml = '';
+
+                    // Logic for status labels
+                    if (req.status === 'pending') {
+                        statusHtml = '<span style="color:orange; font-weight:bold;">Pending</span>';
+                        actionHtml = `
+                            <button class="btn btn-success update-status" data-id="${req.id}" data-action="accepted">Accept</button>
+                            <button class="btn btn-danger update-status" data-id="${req.id}" data-action="rejected">Reject</button>
+                        `;
+                    } else if (req.status === 'accepted') {
+                        statusHtml = '<span style="color:green; font-weight:bold;">Accepted</span>';
+                        actionHtml = '<em>Completed</em>';
+                    } else if (req.status === 'rejected') {
+                        statusHtml = '<span style="color:red; font-weight:bold;">Rejected</span>';
+                        actionHtml = '<em>Completed</em>';
+                    }
+
+                    let dateStr = new Date(req.date_requested).toLocaleString();
+
+                    let row = `
+                        <tr style="text-align:center; border-bottom:1px solid #ddd;">
+                            <td style="padding:0.75rem;">${req.donation_title}</td>
+                            <td style="padding:0.75rem;">${req.receiver_name || '<span style="color:red;">No NGO linked</span>'}</td>
+                            <td style="padding:0.75rem;">${statusHtml}</td>
+                            <td style="padding:0.75rem;">${dateStr}</td>
+                            <td style="padding:0.75rem;">${actionHtml}</td>
+                        </tr>
+                    `;
+                    tbody.append(row);
+                });
+            }
+        });
+    }
+
+    // Initial Fetch
+    fetchRequests();
+
+    // Handle status update (Accept/Reject)
+    $(document).on('click', '.update-status', function() {
+        let requestId = $(this).data('id');
+        let newStatus = $(this).data('action');
+
+        $.ajax({
+            url: `/api/core/claim-requests/${requestId}/`, 
+type: 'PATCH',
+            data: JSON.stringify({
+                request_id: requestId,
+                status: newStatus
+            }),
+            contentType: 'application/json',
+            headers: { "X-CSRFToken": "{{ csrf_token }}" },
+            success: function(response) {
+                fetchRequests(); // Refresh table
+            },
+            error: function(xhr) {
+                alert("Error updating request: " + xhr.responseText);
+            }
+        });
+    });
+});
+</script>
 {% endblock %}
-
-
-
-
-

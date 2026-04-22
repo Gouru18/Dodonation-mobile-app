@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import transaction
@@ -37,38 +38,34 @@ def donor_signup_view(request):
 @login_donor
 def donor_profile(request):
     user = request.user
-    # Try to get donor profile, create if it doesn't exist
-    donor_profile = getattr(user, "donor_profile", None)
-    if donor_profile is None:
-        donor_profile = DonorProfile(user=user)
-        donor_profile.save()
+    donor_profile, created = DonorProfile.objects.get_or_create(user=user)
 
     if request.method == "POST":
-        # Updating profile
         if "update_profile" in request.POST:
             user_form = DonorUserEditForm(request.POST, instance=user)
             profile_form = DonorProfileForm(request.POST, request.FILES, instance=donor_profile)
 
             if user_form.is_valid() and profile_form.is_valid():
                 user_form.save()
-
-                profile = profile_form.save(commit=False)
-                profile.user = user  # make sure user is attached
-                profile.save()
-
-                # Keep user logged in even if username/email changes
+                profile_form.save()
                 update_session_auth_hash(request, user)
-
+                
+                if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                    return JsonResponse({"status": "success", "message": "Profile updated!"})
+                
                 messages.success(request, "Profile updated successfully!")
                 return redirect("donor_profile")
 
-        # Creating new donation
         elif "create_donation" in request.POST:
             donation_form = DonationForm(request.POST, request.FILES)
             if donation_form.is_valid():
                 donation = donation_form.save(commit=False)
                 donation.donor = donor_profile
                 donation.save()
+
+                if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                    return JsonResponse({"status": "success", "message": "Donation posted!"})
+
                 messages.success(request, "Donation posted successfully!")
                 return redirect("donor_profile")
     else:
@@ -77,18 +74,12 @@ def donor_profile(request):
         donation_form = DonationForm()
 
     donations = Donation.objects.filter(donor=donor_profile).order_by("-date_created")
-
-    return render(
-        request,
-        "donor/donor_profile.html",
-        {
-            "user_form": user_form,
-            "profile_form": profile_form,
-            "donation_form": donation_form,
-            "donations": donations,
-        },
-    )
-
+    return render(request, "donor/donor_profile.html", {
+        "user_form": user_form,
+        "profile_form": profile_form,
+        "donation_form": donation_form,
+        "donations": donations,
+    })
 
 @login_donor
 def edit_donation(request, donation_id):
@@ -145,5 +136,16 @@ def donation_requests(request):
 
 def donor_public_profile(request, donor_id):
     donor_profile = get_object_or_404(DonorProfile, pk=donor_id)
-    donations = donor_profile.donations.all()
-    return render(request, 'donor/donor_public_profile.html', {'donor': donor_profile.user, 'donations': donations})
+    
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({
+            "username": donor_profile.user.username,
+            "email": donor_profile.user.email,
+            "phone_no": getattr(donor_profile, 'phone_no', '')
+        })
+
+    donations = donor_profile.donations.filter(status='available')
+    return render(request, 'donor/donor_public_profile.html', {
+        'donor': donor_profile.user, 
+        'donations': donations
+    })

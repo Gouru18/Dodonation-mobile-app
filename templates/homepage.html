@@ -48,7 +48,6 @@
 </style>
 
 
-<!--  HERO -->
 <div class="hero-section">
     <div class="hero-text">
         <h2>Connecting donors with NGOs</h2>
@@ -65,7 +64,6 @@
 </div>
 
 
-<!--  ABOUT SECTION -->
 <div class="section-cream" id="about">
     <h3>About Dodonation</h3>
     <p>
@@ -76,37 +74,37 @@
 </div>
 
 
-<!-- RECENT DONATIONS -->
-<div class="section-white">
+<div class="section-white" id="recent-donations-container">
     <h3 style="color: var(--dark-green); margin-bottom: 1rem;">Our Recent Donations</h3>
 
-    {% if recent_donations %}
-    <div class="donation-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
-        {% for donation in recent_donations %}
-        <div class="donation-card" style="background:#f5f0e6; border-radius:10px; box-shadow:0 3px 8px rgba(0,0,0,0.08); padding:1rem;">
-      
-            <h4 style="margin:0 0 0.5rem; color: var(--dark-green);">{{ donation.title }}</h4>
-            <p><strong>Description:</strong> {{ donation.description|truncatechars:120 }}</p>
-            <p><strong>Category:</strong> {{ donation.get_category_display }}</p>
-            <p><strong>Quantity:</strong> {{ donation.quantity }}</p>
-            <p><strong>Location:</strong> {{ donation.location }}</p>
-            <p><strong>Posted:</strong> {{ donation.date_created|date:"M d, Y" }}</p>
+    <div id="donation-ajax-wrapper">
+        {% if recent_donations %}
+        <div class="donation-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
+            {% for donation in recent_donations %}
+            <div class="donation-card" style="background:#f5f0e6; border-radius:10px; box-shadow:0 3px 8px rgba(0,0,0,0.08); padding:1rem;">
+          
+                <h4 style="margin:0 0 0.5rem; color: var(--dark-green);">{{ donation.title }}</h4>
+                <p><strong>Description:</strong> {{ donation.description|truncatechars:120 }}</p>
+                <p><strong>Category:</strong> {{ donation.get_category_display }}</p>
+                <p><strong>Quantity:</strong> {{ donation.quantity }}</p>
+                <p><strong>Location:</strong> {{ donation.location }}</p>
+                <p><strong>Posted:</strong> {{ donation.date_created|date:"M d, Y" }}</p>
 
-            {% if donation.image %}
-            <div style="margin-top:0.7rem; border-radius:8px; overflow:hidden;">
-                <img src="{{ donation.image.url }}" alt="{{ donation.title }}" style="width:100%; height:160px; object-fit:cover;">
+                {% if donation.image %}
+                <div style="margin-top:0.7rem; border-radius:8px; overflow:hidden;">
+                    <img src="{{ donation.image.url }}" alt="{{ donation.title }}" style="width:100%; height:160px; object-fit:cover;">
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
+            {% endfor %}
         </div>
-        {% endfor %}
+        {% else %}
+            <p style="color:#666;">No recent donations yet. Check back soon!</p>
+        {% endif %}
     </div>
-    {% else %}
-        <p style="color:#666;">No recent donations yet. Check back soon!</p>
-    {% endif %}
 </div>
 
 
-<!-- CLAIMING STEPS -->
 <div class="section-cream">
     <h3>How to Claim Donations (for NGOs)</h3>
     <ol class="steps-list">
@@ -117,5 +115,30 @@
     </ol>
     <ul><li><strong>Expiry:</strong> If the product is not requested before the expiry date, the product will not be available for donation.</li></ul>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Function to refresh the "Recent Donations" list specifically
+    function updateRecentDonations() {
+        $.ajax({
+            url: window.location.pathname,
+            type: 'GET',
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+            success: function(response) {
+                // Find the new donation list from the response and replace the old one
+                var newContent = $(response).find('#donation-ajax-wrapper').html();
+                $('#donation-ajax-wrapper').html(newContent);
+            },
+            error: function(err) {
+                console.log("AJAX error fetching donations:", err);
+            }
+        });
+    }
+
+    // Refresh every 2 minutes
+    setInterval(updateRecentDonations, 120000);
+});
+</script>
 
 {% endblock %}

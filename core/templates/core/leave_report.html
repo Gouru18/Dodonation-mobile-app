@@ -2,34 +2,31 @@
 {% load static %}
 
 {% block content %}
-<p>
-</p>
+<p></p>
 <div style="display: flex; justify-content: center; align-items: center; min-height: 70vh;">
     <div style="width: 100%; max-width: 500px; padding: 2rem; background-color: var(--cream); border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
         <h2 style="text-align: center; color: var(--dark-green); margin-bottom: 1.5rem;">Submit a Report</h2>
 
-        <form method="POST" action="">
+        <form id="report-form">
             {% csrf_token %}
             
             {% for field in form %}
                 <div style="margin-bottom: 1rem;">
                     {{ field.label_tag }}
                     {{ field }}
-                    {% if field.errors %}
-                        <div style="color: red; font-size: 0.9rem;">{{ field.errors|striptags }}</div>
-                    {% endif %}
+                    <div id="error-{{ field.name }}" class="field-error" style="color: red; font-size: 0.9rem;"></div>
                 </div>
             {% endfor %}
 
             <div style="text-align: center; margin-top: 1.5rem;">
-                <button type="submit" class="btn btn-success" style="width: 100%;">Submit Report</button>
+                <button type="submit" id="submit-button" class="btn btn-success" style="width: 100%;">Submit Report</button>
+                <p id="response-message" style="margin-top: 1rem; font-weight: bold;"></p>
             </div>
         </form>
     </div>
 </div>
 
 <style>
-    /* Make all input and textarea fields the same width */
     input[type="text"],
     input[type="email"],
     textarea {
@@ -40,7 +37,7 @@
         box-sizing: border-box;
         font-size: 1rem;
         font-family: inherit;
-        background-color: white; /* keep input fields white for contrast */
+        background-color: white;
     }
 
     textarea {
@@ -55,6 +52,45 @@
         color: var(--dark-green);
     }
 </style>
-<p>
-</p>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#report-form').on('submit', function(e) {
+        e.preventDefault();
+
+        $('.field-error').text("");
+        $('#response-message').text("Submitting...").css("color", "orange");
+
+        // Map form fields to data object
+        let reportData = {
+            name: $('#id_name').val(),
+            email: $('#id_email').val(),
+            message: $('#id_message').val()
+        };
+
+        $.ajax({
+            url: '/api/core/reports/create/',
+            type: 'POST',
+            data: JSON.stringify(reportData),
+            contentType: 'application/json',
+            headers: { "X-CSRFToken": "{{ csrf_token }}" },
+            success: function(data) {
+                $('#response-message').text("Report submitted successfully.").css("color", "green");
+                $('#report-form')[0].reset();
+            },
+            error: function(xhr) {
+                $('#response-message').text("Submission failed.").css("color", "red");
+                if (xhr.status === 400) {
+                    let errors = xhr.responseJSON;
+                    for (let key in errors) {
+                        $(`#error-${key}`).text(errors[key][0]);
+                    }
+                }
+            }
+        });
+    });
+});
+</script>
+<p></p>
 {% endblock %}

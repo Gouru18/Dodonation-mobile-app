@@ -17,4 +17,5 @@ urlpatterns = [
     path('users/login/', views.login, name='api-login'),
     path('users/select-role/', views.selct_role, name='api-select-role'),
     path('test/', views.test, name='test'),
+    path('core/donations/<int:pk>/', views.donation_detail, name='donation-detail'),
 ]

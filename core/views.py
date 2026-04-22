@@ -5,7 +5,7 @@ from core.models import Donation, ClaimRequest, GeneralReview, Report
 from core.forms import ReviewForm, ReportForm, DonationForm
 from django.db.models import Sum
 from users.decorators import login_required_home
-from ngo.views import NGOProfile
+from ngo.models import NGOProfile
 
 def donation_list(request):
     query = request.GET.get('q', '')

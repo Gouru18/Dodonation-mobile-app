@@ -40,15 +40,46 @@
 
 <div class="ngo-list-section">
     <h3>Registered NGOs</h3>
-    <ul class="ngo-list">
-        {% for ngo in ngos %}
-            <li>
-                <a href="{% url 'ngo_public_profile' ngo.pk %}">{{ ngo.name }}</a>
-            </li>
-        {% empty %}
-            <li>No NGOs registered yet.</li>
-        {% endfor %}
-    </ul>
+    <ul id="ngo-list-container" class="ngo-list">
+        </ul>
+    <p id="loading-status" style="text-align: center; color: #666;">Loading NGOs...</p>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    function loadNGOs() {
+        $.ajax({
+            url: '/api/ngo/profile/',
+            type: 'GET',
+            success: function(data) {
+                let container = $('#ngo-list-container');
+                container.empty();
+                $('#loading-status').hide();
+
+                if (data.length === 0) {
+                    container.append('<li>No NGOs registered yet.</li>');
+                    return;
+                }
+
+                data.forEach(function(ngo) {
+
+                    let ngoHtml = `
+                        <li>
+                            <a href="/ngo/profile/${ngo.id}/">${ngo.name}</a>
+                        </li>
+                    `;
+                    container.append(ngoHtml);
+                });
+            },
+            error: function(xhr) {
+                $('#loading-status').text("Failed to load NGOs. Please ensure you are logged in as an NGO.").css("color", "red");
+            }
+        });
+    }
+
+    loadNGOs();
+});
+</script>
 
 {% endblock %}

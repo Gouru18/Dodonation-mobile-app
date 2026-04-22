@@ -14,11 +14,27 @@ class UserSerializer(serializers.ModelSerializer):
 
 class DonationSerializer(serializers.ModelSerializer):
     donor_username = serializers.CharField(source='donor.user.username', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    image = serializers.SerializerMethodField()
+
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image and request:
+            return request.build_absolute_uri(obj.image.url)
+        elif obj.image:
+            return obj.image.url
+        return None
 
     class Meta:
         model = Donation
-        fields = ['id', 'title', 'description', 'quantity', 'expiry_date', 'status', 'donor_username']
-
+        fields = [
+            'id', 'title', 'description', 'quantity', 'location', 
+            'expiry_date', 'category', 'category_display', 
+            'status', 'status_display', 'date_created', 
+            'donor', 'donor_username', 'image'
+        ]
 class ClaimRequestSerializer(serializers.ModelSerializer):
     donation_title = serializers.CharField(source='donation.title', read_only=True)
     receiver_name = serializers.CharField(source='receiver.user.username', read_only=True)

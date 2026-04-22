@@ -4,63 +4,60 @@
 <head>
     <title>Donor Sign Up</title>
     <link rel="stylesheet" href="{% static 'users/style.css' %}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <div class="form-container">
         <h2>Donor Sign Up</h2>
+        <div id="message-container"></div>
 
-        <!-- Display non-field errors -->
-        {% if user_form.non_field_errors or profile_form.non_field_errors %}
-            <div class="popup-message">
-                {% for error in user_form.non_field_errors %}
-                    <p>{{ error }}</p>
-                {% endfor %}
-                {% for error in profile_form.non_field_errors %}
-                    <p>{{ error }}</p>
-                {% endfor %}
-            </div>
-        {% endif %}
-
-        <form method="post">
+        <form id="signup-form" method="post" enctype="multipart/form-data">
             {% csrf_token %}
-
             <h3>Account Information</h3>
             {% for field in user_form %}
                 <div>
-                    {{ field.label_tag }}
-                    {{ field }}
-                    {% if field.errors %}
-                        <ul class="field-errors">
-                            {% for error in field.errors %}
-                                <li style="color:red;">{{ error }}</li>
-                            {% endfor %}
-                        </ul>
-                    {% endif %}
+                    {{ field.label_tag }} {{ field }}
+                    <div class="error-msg" id="error-{{ field.name }}" style="color:red; font-size:0.8rem;"></div>
                 </div>
             {% endfor %}
 
             <h3>Donor Profile</h3>
             {% for field in profile_form %}
                 <div>
-                    {{ field.label_tag }}
-                    {{ field }}
-                    {% if field.errors %}
-                        <ul class="field-errors">
-                            {% for error in field.errors %}
-                                <li style="color:red;">{{ error }}</li>
-                            {% endfor %}
-                        </ul>
-                    {% endif %}
+                    {{ field.label_tag }} {{ field }}
+                    <div class="error-msg" id="error-{{ field.name }}" style="color:red; font-size:0.8rem;"></div>
                 </div>
             {% endfor %}
-
-            <button type="submit">Create Account</button>
+            <button type="submit" id="submit-btn">Create Account</button>
         </form>
-
-        <p style="text-align:center;">
-            Already have an account? 
-            <a href="{% url 'login' %}" style="color:#2e4d2b;">Login</a>
-        </p>
     </div>
+
+    <script>
+    $(document).ready(function() {
+        $('#signup-form').on('submit', function(e) {
+            e.preventDefault();
+            let formData = new FormData(this);
+            $('.error-msg').text('');
+            
+            $.ajax({
+                url: "{% url 'donor_signup' %}",
+                type: "POST",
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+                success: function(response) {
+                    window.location.href = "{% url 'login' %}";
+                },
+                error: function(xhr) {
+                    let errors = xhr.responseJSON.errors;
+                    for (let field in errors) {
+                        $(`#error-${field}`).text(errors[field][0]);
+                    }
+                }
+            });
+        });
+    });
+    </script>
 </body>
 </html>

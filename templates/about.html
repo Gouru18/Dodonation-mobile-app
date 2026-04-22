@@ -90,18 +90,17 @@
             We aim to reduce waste, support communities, and make meaningful giving simple and accessible.
         </p>
 
-        <!-- Stats Section -->
         <div class="stats-container" style="display: flex; gap: 2rem; justify-content: center; margin-top: 2rem; flex-wrap: wrap;">
             <div class="stats-box" style="flex: 1; min-width: 250px; background-color: #A7C957; padding: 1.5rem; border-radius: 10px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
                 <h3 style="color: black;">Total Donations Posts Till Today</h3>
-                <div class="stats-number" style="font-size: 2rem; font-weight: bold; color: black;">
+                <div id="ajax-donation-count" class="stats-number" style="font-size: 2rem; font-weight: bold; color: black;">
                     {{ donation_count }}
                 </div>
             </div>
 
             <div class="stats-box" style="flex: 1; min-width: 250px; background-color: #A7C957; padding: 1.5rem; border-radius: 10px; text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
                 <h3 style="color: black;">Total Items Donated</h3>
-                <div class="stats-number" style="font-size: 2rem; font-weight: bold; color: black;">
+                <div id="ajax-total-quantity" class="stats-number" style="font-size: 2rem; font-weight: bold; color: black;">
                     {{ total_quantity }}
                 </div>
             </div>
@@ -125,5 +124,24 @@
 
     </div>
 </section>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    function refreshStats() {
+        $.ajax({
+            url: window.location.pathname, // Hits the current about view
+            type: 'GET',
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+            success: function(data) {
+
+                $('#ajax-donation-count').text(data.donation_count);
+                $('#ajax-total-quantity').text(data.total_quantity);
+            }
+        });
+    }
+
+});
+</script>
 
 {% endblock %}

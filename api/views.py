@@ -1,5 +1,6 @@
 from rest_framework import response
 from rest_framework.decorators import api_view
+from django.shortcuts import render, get_object_or_404
 
 from core.models import Donation
 from core.models import ClaimRequest
@@ -136,7 +137,19 @@ def create_report(request, format=None):
     return response.Response(serializer.errors, status=400)
 
 
-
+@api_view(['GET', 'PATCH', 'DELETE'])
+@login_donor
+def donation_detail(request, pk):
+    donation = get_object_or_404(Donation, pk=pk)
+    
+    if request.method == 'PATCH':
+        serializer = DonationSerializer(donation, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return response.Response(serializer.data)
+        return response.Response(serializer.errors, status=400)
+    
+    # ... handle GET or DELETE if needed
 
 
 

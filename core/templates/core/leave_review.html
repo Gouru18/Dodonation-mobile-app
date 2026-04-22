@@ -6,37 +6,27 @@
         <h2 style="text-align: center; color: var(--dark-green); margin-bottom: 1rem;">Leave a Review</h2>
         <p style="text-align: center; margin-bottom: 1.5rem;">Let us know what you think about Dodonation!</p>
 
-        <form method="POST" action="">
+        <form id="review-form">
             {% csrf_token %}
             {% for field in form %}
                 <div style="margin-bottom: 1rem;">
                     {{ field.label_tag }}
                     {{ field }}
-                    {% if field.errors %}
-                        <div style="color: red; font-size: 0.9rem;">{{ field.errors|striptags }}</div>
-                    {% endif %}
+                    <div id="error-{{ field.name }}" class="field-error" style="color: red; font-size: 0.9rem;"></div>
                 </div>
             {% endfor %}
 
             <div style="text-align: center; margin-top: 1.5rem;">
                 <button type="submit" class="btn btn-success" style="width: 100%;">Submit Review</button>
+                <p id="form-status" style="margin-top: 10px; font-weight: bold;"></p>
             </div>
         </form>
 
         <hr style="margin-top: 2rem; margin-bottom: 2rem;">
 
         <h3 style="color: var(--medium-green); margin-bottom: 1rem;">What Others Are Saying</h3>
-        <div class="review-list">
-            {% for review in reviews %}
-                <div style="background: #fff; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
-                    <p style="font-style: italic; margin-bottom: 0.5rem;">"{{ review.message }}"</p>
-                    <strong style="color: var(--dark-green);">- {{ review.name }}</strong>
-                    <small style="display: block; color: #777; margin-top: 0.3rem;">{{ review.created_at|date:"F d, Y" }}</small>
-                </div>
-            {% empty %}
-                <p style="text-align: center; color: #666;">No reviews yet. Be the first!</p>
-            {% endfor %}
-        </div>
+        <div id="review-list-container" class="review-list">
+            </div>
     </div>
 </div>
 
@@ -66,4 +56,80 @@
         color: var(--dark-green);
     }
 </style>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    
+    // Fetch and display reviews from API
+    function loadReviews() {
+        $.ajax({
+            url: '/api/core/general-reviews/',
+            type: 'GET',
+            success: function(data) {
+                let container = $('#review-list-container');
+                container.empty();
+
+                if (data.length === 0) {
+                    container.append('<p style="text-align: center; color: #666;">No reviews yet. Be the first!</p>');
+                    return;
+                }
+
+                data.forEach(function(review) {
+                    let date = new Date(review.created_at).toLocaleDateString('en-US', {
+                        month: 'long', day: 'numeric', year: 'numeric'
+                    });
+                    
+                    let reviewHtml = `
+                        <div style="background: #fff; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
+                            <p style="font-style: italic; margin-bottom: 0.5rem;">"${review.message}"</p>
+                            <strong style="color: var(--dark-green);">- ${review.name}</strong>
+                            <small style="display: block; color: #777; margin-top: 0.3rem;">${date}</small>
+                        </div>
+                    `;
+                    container.append(reviewHtml);
+                });
+            }
+        });
+    }
+
+    // Initial load
+    loadReviews();
+
+    // Form submission via AJAX
+    $('#review-form').on('submit', function(e) {
+        e.preventDefault();
+        $('.field-error').text("");
+        $('#form-status').text("Submitting...").css("color", "orange");
+
+        let reviewData = {
+            name: $('#id_name').val(),
+            email: $('#id_email').val(),
+            message: $('#id_message').val()
+        };
+
+        $.ajax({
+            url: '/api/core/general-reviews/create/',
+            type: 'POST',
+            data: JSON.stringify(reviewData),
+            contentType: 'application/json',
+            headers: { "X-CSRFToken": "{{ csrf_token }}" },
+            success: function(response) {
+                $('#form-status').text("Review submitted!").css("color", "green");
+                $('#review-form')[0].reset();
+                loadReviews(); // Refresh list without reloading page
+            },
+            error: function(xhr) {
+                $('#form-status').text("Submission failed.").css("color", "red");
+                if (xhr.status === 400) {
+                    let errors = xhr.responseJSON;
+                    for (let key in errors) {
+                        $(`#error-${key}`).text(errors[key][0]);
+                    }
+                }
+            }
+        });
+    });
+});
+</script>
 {% endblock %}
