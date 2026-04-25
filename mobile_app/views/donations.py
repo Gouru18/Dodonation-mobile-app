@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime, date, time
 from urllib.parse import urljoin, urlparse
 import flet as ft
 
@@ -42,15 +43,83 @@ FILTER_CATEGORY_OPTIONS = [
     ft.dropdown.Option(key="other", text="Other"),
 ]
 
+FILTER_STATUS_OPTIONS = [
+    ft.dropdown.Option(key="all", text="All Statuses"),
+    ft.dropdown.Option(key="available", text="Available"),
+    ft.dropdown.Option(key="pending", text="Pending"),
+    ft.dropdown.Option(key="claimed", text="Claimed"),
+    ft.dropdown.Option(key="rejected", text="Rejected"),
+]
+
+
+def _inline_error():
+    return ft.Text("", color="#B42318", size=12, visible=False)
+
+
+def _field_block(field, error_label):
+    return ft.Column([field, error_label], spacing=4)
+
+
+def _set_inline_error(field, error_label, message):
+    field.error_text = message
+    error_label.value = message or ""
+    error_label.visible = bool(message)
+
+
+def _validate_quantity(value):
+    raw = (value or "").strip()
+    if not raw:
+        return "Quantity is required."
+    if not raw.isdigit():
+        return "Quantity must contain numbers only."
+    if int(raw) <= 0:
+        return "Quantity must be greater than zero."
+    return None
+
+
+def _validate_donation_date(value):
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed_date = datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return "Use a valid date in YYYY-MM-DD format."
+    if parsed_date < date.today():
+        return "Expiry date cannot be in the past."
+    return None
+
+
+def _parse_picker_date(value):
+    if isinstance(value, datetime):
+        return value
+
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _format_picker_date(value):
+    parsed_date = _parse_picker_date(value)
+    if not parsed_date:
+        return ""
+    return parsed_date.strftime("%Y-%m-%d")
+
 
 def donations_view(page: ft.Page):
     is_donor = AuthService.user and AuthService.user.get("role") == "donor"
-    donations_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
+    donations_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO)
     media_base_url = BASE_URL.rsplit("/api", 1)[0]
     image_fit_cover = getattr(getattr(ft, "ImageFit", None), "COVER", "cover")
     donor_edit_state = {}
     claim_notice_state = {"token": 0}
     selected_category_filter = {"value": "all"}
+    selected_status_filter = {"value": "all"}
     claim_notice = ft.Container(
         visible=False,
         padding=16,
@@ -61,6 +130,15 @@ def donations_view(page: ft.Page):
     category_filter = ft.Dropdown(
         label="Filter by Category",
         options=FILTER_CATEGORY_OPTIONS,
+        value="all",
+        border_radius=14,
+        filled=True,
+        bgcolor="white",
+        width=220,
+    )
+    status_filter = ft.Dropdown(
+        label="Filter by Status",
+        options=FILTER_STATUS_OPTIONS,
         value="all",
         border_radius=14,
         filled=True,
@@ -90,10 +168,58 @@ def donations_view(page: ft.Page):
     )
     quantity = auth_input("Quantity", ft.Icons.NUMBERS)
     quantity.value = "1"
-    expiry_date = auth_input("Expiry Date (YYYY-MM-DD)", ft.Icons.CALENDAR_MONTH)
+    expiry_date = auth_input("Expiry Date", ft.Icons.CALENDAR_MONTH)
+    expiry_date.width = 240
+    expiry_date.read_only = True
+    expiry_date.hint_text = "Pick an expiry date"
+    title_error = _inline_error()
+    description_error = _inline_error()
+    quantity_error = _inline_error()
+    expiry_date_error = _inline_error()
 
     selected_image = ft.Text("No image selected", color="#6B7280")
     selected_image_path = {"value": None}
+
+    def refresh_create_form(*_, update_page=True):
+        title_message = None if title.value and title.value.strip() else "Title is required."
+        description_message = None if description.value and description.value.strip() else "Description is required."
+        quantity_message = _validate_quantity(quantity.value)
+        expiry_message = _validate_donation_date(expiry_date.value)
+        _set_inline_error(title, title_error, title_message)
+        _set_inline_error(description, description_error, description_message)
+        _set_inline_error(quantity, quantity_error, quantity_message)
+        _set_inline_error(expiry_date, expiry_date_error, expiry_message)
+        if update_page:
+            page.update()
+
+    def set_create_expiry_date_value(selected_date, update_page=True):
+        expiry_date.value = _format_picker_date(selected_date)
+        refresh_create_form(update_page=update_page)
+
+    def handle_create_date_change(e):
+        set_create_expiry_date_value(e.control.value)
+
+    create_expiry_date_picker = ft.DatePicker(
+        modal=True,
+        value=datetime.now(),
+        first_date=datetime.combine(date.today(), time.min),
+        last_date=datetime(date.today().year + 5, 12, 31),
+        help_text="Select expiry date",
+        confirm_text="Choose",
+        cancel_text="Cancel",
+        error_format_text="Pick a valid date.",
+        error_invalid_text="Expiry date cannot be in the past.",
+        entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+        on_change=handle_create_date_change,
+    )
+
+    def open_create_expiry_picker(e):
+        selected_date = _parse_picker_date(expiry_date.value)
+        create_expiry_date_picker.value = selected_date or datetime.combine(date.today(), time.min)
+        page.show_dialog(create_expiry_date_picker)
+
+    def clear_create_expiry_date(e):
+        set_create_expiry_date_value("", update_page=True)
 
     def resolve_image_src(item):
         image_src = item.get("image_url") or item.get("image")
@@ -117,19 +243,47 @@ def donations_view(page: ft.Page):
             item.get("feed_status") or item.get("status") or "available"
         ).strip().lower()
 
-        if normalized_status == "pending":
-            return "available"
-
         if normalized_status == "completed":
             return "claimed"
 
         if normalized_status == "expired":
             return "rejected"
 
-        if normalized_status not in {"available", "claimed", "rejected"}:
+        if normalized_status not in {"available", "pending", "claimed", "rejected"}:
             return "available"
 
         return normalized_status
+
+    def current_feed_status(item):
+        return donor_feed_status(item) if is_donor else display_status(item.get("status"))
+
+    def filter_matches(item):
+        category_value = selected_category_filter["value"]
+        status_value = selected_status_filter["value"]
+        item_category = (item.get("category") or "").strip().lower()
+        item_status = current_feed_status(item)
+
+        matches_category = category_value == "all" or item_category == category_value
+
+        if status_value == "all":
+            matches_status = True
+        elif not is_donor and status_value == "pending":
+            matches_status = item_status == "available"
+        else:
+            matches_status = item_status == status_value
+
+        return matches_category and matches_status
+
+    def no_results_message():
+        parts = []
+        if selected_category_filter["value"] != "all":
+            parts.append(f"category '{selected_category_filter['value']}'")
+        if selected_status_filter["value"] != "all":
+            parts.append(f"status '{selected_status_filter['value']}'")
+
+        if parts:
+            return f"There are no donations for the selected {' and '.join(parts)} filter."
+        return "No donations found yet."
 
     def status_color(status):
         return {
@@ -174,7 +328,7 @@ def donations_view(page: ft.Page):
 
     def donation_card(item):
         donor_data = item.get("donor") or {}
-        status = donor_feed_status(item) if is_donor else display_status(item.get("status"))
+        status = current_feed_status(item)
         image_src = resolve_image_src(item)
         edit_state = get_donor_edit_state(item)
 
@@ -237,9 +391,51 @@ def donations_view(page: ft.Page):
             )
             quantity_field = auth_input("Quantity", ft.Icons.NUMBERS)
             quantity_field.value = edit_state["quantity"]
-            expiry_field = auth_input("Expiry Date (YYYY-MM-DD)", ft.Icons.CALENDAR_MONTH)
+            expiry_field = auth_input("Expiry Date", ft.Icons.CALENDAR_MONTH)
+            expiry_field.width = 240
             expiry_field.value = edit_state["expiry_date"]
+            expiry_field.read_only = True
+            expiry_field.hint_text = "Pick an expiry date"
+            quantity_field_error = _inline_error()
+            expiry_field_error = _inline_error()
             edit_image_label = ft.Text(edit_state["image_label"], color="#6B7280")
+
+            def refresh_edit_form(*_, update_page=True):
+                quantity_message = _validate_quantity(quantity_field.value)
+                expiry_message = _validate_donation_date(expiry_field.value)
+                _set_inline_error(quantity_field, quantity_field_error, quantity_message)
+                _set_inline_error(expiry_field, expiry_field_error, expiry_message)
+                if update_page:
+                    page.update()
+
+            def set_edit_expiry_date_value(selected_date, update_page=True):
+                expiry_field.value = _format_picker_date(selected_date)
+                refresh_edit_form(update_page=update_page)
+
+            def handle_edit_date_change(e):
+                set_edit_expiry_date_value(e.control.value)
+
+            edit_expiry_date_picker = ft.DatePicker(
+                modal=True,
+                value=datetime.now(),
+                first_date=datetime.combine(date.today(), time.min),
+                last_date=datetime(date.today().year + 5, 12, 31),
+                help_text="Select expiry date",
+                confirm_text="Choose",
+                cancel_text="Cancel",
+                error_format_text="Pick a valid date.",
+                error_invalid_text="Expiry date cannot be in the past.",
+                entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+                on_change=handle_edit_date_change,
+            )
+
+            def open_edit_expiry_picker(e):
+                selected_date = _parse_picker_date(expiry_field.value)
+                edit_expiry_date_picker.value = selected_date or datetime.combine(date.today(), time.min)
+                page.show_dialog(edit_expiry_date_picker)
+
+            def clear_edit_expiry_date(e):
+                set_edit_expiry_date_value("", update_page=True)
 
             async def pick_edit_image(e, state=edit_state, label=edit_image_label):
                 def choose_file():
@@ -288,11 +484,17 @@ def donations_view(page: ft.Page):
                 quantity_control=quantity_field,
                 expiry_control=expiry_field,
             ):
-                try:
-                    quantity_value = int(quantity_control.value or "1")
-                except ValueError:
-                    show_error(page, "Quantity must be a number.")
+                quantity_message = _validate_quantity(quantity_control.value)
+                expiry_message = _validate_donation_date(expiry_control.value)
+                _set_inline_error(quantity_control, quantity_field_error, quantity_message)
+                _set_inline_error(expiry_control, expiry_field_error, expiry_message)
+                page.update()
+
+                if quantity_message or expiry_message:
+                    show_error(page, "Please fix the highlighted donation fields.")
                     return
+
+                quantity_value = int((quantity_control.value or "1").strip())
 
                 state["title"] = title_control.value or ""
                 state["description"] = description_control.value or ""
@@ -335,8 +537,33 @@ def donations_view(page: ft.Page):
                         title_field,
                         description_field,
                         category_field,
-                        quantity_field,
-                        expiry_field,
+                        _field_block(quantity_field, quantity_field_error),
+                        ft.Column(
+                            [
+                                ft.Row(
+                                    [
+                                        ft.Container(content=expiry_field),
+                                        secondary_button(
+                                            "Pick Date",
+                                            open_edit_expiry_picker,
+                                            width=160,
+                                            icon=ft.Icons.CALENDAR_MONTH,
+                                        ),
+                                        secondary_button(
+                                            "Clear Date",
+                                            clear_edit_expiry_date,
+                                            width=160,
+                                            icon=ft.Icons.CLOSE,
+                                        ),
+                                    ],
+                                    wrap=True,
+                                    spacing=4,
+                                    vertical_alignment=ft.CrossAxisAlignment.END,
+                                ),
+                                expiry_field_error,
+                            ],
+                            spacing=4,
+                        ),
                         ft.Container(
                             padding=16,
                             border_radius=16,
@@ -373,6 +600,9 @@ def donations_view(page: ft.Page):
                         ),
                     ]
                 )
+                quantity_field.on_change = refresh_edit_form
+                expiry_field.on_change = refresh_edit_form
+                refresh_edit_form(update_page=False)
             else:
                 controls.extend(
                     [
@@ -431,14 +661,46 @@ def donations_view(page: ft.Page):
                     )
         else:
             message_field = auth_input("Claim message", ft.Icons.CHAT, multiline=True)
+            claim_image_path = {"value": None}
+            claim_image_label = ft.Text("No proof selected", color="#6B7280")
+
+            def set_claim_image(file_path):
+                claim_image_path["value"] = file_path
+                claim_image_label.value = os.path.basename(file_path)
+
+            async def select_claim_image_file(e):
+                await pick_image_file(page, set_claim_image)
+
+            async def select_claim_image_camera(e):
+                await capture_image(page, set_claim_image)
 
             def handle_claim_click(e, donation_id=item["id"], field=message_field):
-                page.run_task(claim_donation, donation_id, field)
+                page.run_task(claim_donation, donation_id, field, claim_image_path["value"])
 
             if status == "available":
                 controls.extend(
                     [
                         message_field,
+                        ft.Row(
+                            [
+                                secondary_button(
+                                    "Upload Proof",
+                                    select_claim_image_file,
+                                    width=170,
+                                    icon=ft.Icons.UPLOAD_FILE,
+                                ),
+                                secondary_button(
+                                    "Take Photo",
+                                    select_claim_image_camera,
+                                    width=170,
+                                    icon=ft.Icons.CAMERA_ALT,
+                                ),
+                                claim_image_label,
+                            ],
+                            wrap=True,
+                            spacing=12,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
                         secondary_button("Claim Donation", handle_claim_click, width=220, icon=ft.Icons.SEND),
                     ]
                 )
@@ -456,11 +718,8 @@ def donations_view(page: ft.Page):
         )
 
     async def load_donations():
-        category_filter_value = selected_category_filter["value"]
-        category_param = None if category_filter_value == "all" else category_filter_value
         response = await asyncio.to_thread(
             lambda: DonationService.get_donations(
-                category=category_param,
                 status=None if is_donor else "pending",
             )
         )
@@ -472,12 +731,25 @@ def donations_view(page: ft.Page):
             return
 
         items = response.json()
-        if not items:
+        filtered_items = [item for item in items if filter_matches(item)]
+
+        if not filtered_items:
             donations_column.controls.append(
-                muted_text("No donations found yet.")
+                ft.Container(
+                    padding=20,
+                    border_radius=12,
+                    bgcolor="#FEF3F2",
+                    border=ft.Border.all(1, "#FECACA"),
+                    content=ft.Text(
+                        no_results_message(),
+                        color="#B42318",
+                        size=14,
+                        weight=ft.FontWeight.W_500,
+                    ),
+                )
             )
         else:
-            for item in items:
+            for item in filtered_items:
                 donations_column.controls.append(donation_card(item))
         page.update()
 
@@ -485,59 +757,80 @@ def donations_view(page: ft.Page):
         selected_category_filter["value"] = category_filter.value or "all"
         page.run_task(load_donations)
 
-    category_filter.on_change = apply_category_filter
+
+    def apply_status_filter(e):
+        selected_status_filter["value"] = status_filter.value or "all"
+        page.run_task(load_donations)
+
+
+    def apply_filters():
+        selected_category_filter["value"] = category_filter.value or "all"
+        selected_status_filter["value"] = status_filter.value or "all"
+        page.run_task(load_donations)
+
 
     def refresh_feed(e):
         hide_claim_notice()
         category_filter.value = "all"
+        status_filter.value = "all"
         selected_category_filter["value"] = "all"
+        selected_status_filter["value"] = "all"
         page.run_task(load_donations)
 
+    async def pick_image_file(page, callback):
+        picker = ft.FilePicker()
+        files = await picker.pick_files(
+            dialog_title="Choose image",
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=["png", "jpg", "jpeg", "gif", "bmp", "webp"],
+            allow_multiple=False,
+            with_data=False,
+        )
+        if files and files[0].path:
+            callback(files[0].path)
+        page.update()
+
+    async def capture_image(page, callback):
+        await pick_image_file(page, callback)
+
     async def pick_image(e):
-        def choose_file():
-            try:
-                import tkinter as tk
-                from tkinter import filedialog
-
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes("-topmost", True)
-                file_path = filedialog.askopenfilename(
-                    title="Choose donation image",
-                    filetypes=[
-                        ("Image files", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
-                        ("All files", "*.*"),
-                    ],
-                )
-                root.destroy()
-                return file_path
-            except Exception:
-                return None
-
-        file_path = await asyncio.to_thread(choose_file)
-        if file_path:
+        def on_file_selected(file_path):
             selected_image_path["value"] = file_path
             selected_image.value = os.path.basename(file_path)
-        else:
+
+        await pick_image_file(page, on_file_selected)
+        if not selected_image_path["value"]:
             selected_image.value = "No image selected"
         page.update()
 
     async def create_donation(e):
+        quantity_message = _validate_quantity(quantity.value)
+        expiry_message = _validate_donation_date(expiry_date.value)
+        _set_inline_error(quantity, quantity_error, quantity_message)
+        _set_inline_error(expiry_date, expiry_date_error, expiry_message)
+        page.update()
+
+        title_message = None if title.value and title.value.strip() else "Title is required."
+        description_message = None if description.value and description.value.strip() else "Description is required."
+        _set_inline_error(title, title_error, title_message)
+        _set_inline_error(description, description_error, description_message)
+
+        if title_message or description_message or quantity_message or expiry_message:
+            show_error(page, "Please fix the highlighted donation fields.")
+            return
+
         try:
             response = await asyncio.to_thread(
                 DonationService.create_donation,
                 title=title.value,
                 description=description.value,
                 category=category.value,
-                quantity=int(quantity.value or "1"),
+                quantity=int((quantity.value or "1").strip()),
                 expiry_date=expiry_date.value or None,
                 latitude=None,
                 longitude=None,
                 image=selected_image_path["value"],
             )
-        except ValueError:
-            show_error(page, "Quantity must be a number.")
-            return
         except Exception as ex:
             show_error(page, f"Error: {ex}")
             return
@@ -547,18 +840,20 @@ def donations_view(page: ft.Page):
             title.value = ""
             description.value = ""
             quantity.value = "1"
-            expiry_date.value = ""
+            set_create_expiry_date_value("", update_page=False)
             selected_image_path["value"] = None
             selected_image.value = "No image selected"
+            refresh_create_form(update_page=False)
             await load_donations()
         else:
             show_error(page, f"Could not create donation: {response.text}")
 
-    async def claim_donation(donation_id, message_field):
+    async def claim_donation(donation_id, message_field, proof_image=None):
         response = await asyncio.to_thread(
             DonationService.claim_donation,
             donation_id,
-            message_field.value or ""
+            message_field.value or "",
+            image=proof_image,
         )
         if response.status_code in (200, 201):
             show_success(page, "Claim request sent.")
@@ -598,16 +893,46 @@ def donations_view(page: ft.Page):
 
     create_controls = []
     if is_donor:
+        title.on_change = refresh_create_form
+        description.on_change = refresh_create_form
+        quantity.on_change = refresh_create_form
+        expiry_date.on_change = refresh_create_form
+        refresh_create_form(update_page=False)
         create_controls = [
             section_card(
                 "Create Donation",
                 [
                     muted_text("Add the donation details below and optionally attach an image."),
-                    title,
-                    description,
+                    _field_block(title, title_error),
+                    _field_block(description, description_error),
                     category,
-                    quantity,
-                    expiry_date,
+                    _field_block(quantity, quantity_error),
+                    ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Container(content=expiry_date),
+                                    secondary_button(
+                                        "Pick Date",
+                                        open_create_expiry_picker,
+                                        width=160,
+                                        icon=ft.Icons.CALENDAR_MONTH,
+                                    ),
+                                    secondary_button(
+                                        "Clear Date",
+                                        clear_create_expiry_date,
+                                        width=160,
+                                        icon=ft.Icons.CLOSE,
+                                    ),
+                                ],
+                                wrap=True,
+                                spacing=12,
+                                vertical_alignment=ft.CrossAxisAlignment.END,
+                            ),
+                            expiry_date_error,
+                        ],
+                        spacing=4,
+                    ),
                     ft.Container(
                         padding=16,
                         border_radius=16,
@@ -625,7 +950,26 @@ def donations_view(page: ft.Page):
                                 muted_text("Choose an optional image from your device."),
                                 ft.Row(
                                     [
-                                        secondary_button("Upload Image", pick_image, width=170, icon=ft.Icons.UPLOAD_FILE),
+                                        secondary_button(
+                                            "Upload Image",
+                                            pick_image,
+                                            width=170,
+                                            icon=ft.Icons.UPLOAD_FILE,
+                                        ),
+                                        secondary_button(
+                                            "Take Photo",
+                                            lambda e: page.run_task(
+                                                capture_image,
+                                                page,
+                                                lambda file_path: (
+                                                    selected_image_path.__setitem__("value", file_path),
+                                                    setattr(selected_image, "value", os.path.basename(file_path)),
+                                                    page.update(),
+                                                ),
+                                            ),
+                                            width=170,
+                                            icon=ft.Icons.CAMERA_ALT,
+                                        ),
                                         selected_image,
                                     ],
                                     wrap=True,
@@ -656,31 +1000,41 @@ def donations_view(page: ft.Page):
         appbar=build_appbar("Donations", go_back),
         controls=[
             page_container(
-                centered_content(
-                    *create_controls,
-                    section_card(
-                        feed_title,
-                        [
-                            ft.Row(
-                                [
-                                    muted_text(feed_subtitle),
-                                    category_filter,
-                                    secondary_button(
-                                        "Refresh",
-                                        refresh_feed,
-                                        width=140,
-                                        icon=ft.Icons.REFRESH,
-                                    ),
-                                ],
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                wrap=True,
-                            ),
-                            claim_notice,
-                            donations_column,
-                        ],
-                    ),
-                )
+                *create_controls,
+                ft.Column(
+                    controls=[
+                        section_card(
+                            feed_title,
+                            [
+                                muted_text(feed_subtitle),
+                                ft.Row(
+                                    [
+                                        category_filter,
+                                        status_filter,
+                                        primary_button(
+                                            "Apply Filters",
+                                            lambda e: apply_filters(),
+                                            width=180,
+                                            icon=ft.Icons.FILTER_LIST,
+                                        ),
+                                        secondary_button(
+                                            "Refresh",
+                                            refresh_feed,
+                                            width=140,
+                                            icon=ft.Icons.REFRESH,
+                                        ),
+                                    ],
+                                    spacing=12,
+                                    wrap=True,
+                                ),
+                                claim_notice,
+                                donations_column,
+                            ],
+                        ),
+                    ],
+                    spacing=20,
+                    expand=True,
+                ),
             ),
         ],
     )

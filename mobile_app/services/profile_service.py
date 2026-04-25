@@ -15,7 +15,7 @@ class ProfileService:
         )
 
     @staticmethod
-    def update_donor_profile(full_name=None, address=None):
+    def update_donor_profile(full_name=None, address=None, phone=None):
         data = {}
 
         if full_name is not None:
@@ -23,6 +23,9 @@ class ProfileService:
 
         if address is not None:
             data["address"] = address
+
+        if phone is not None:
+            data["phone"] = phone
 
         return requests.patch(
             f"{BASE_URL}/profiles/donor/me/",
@@ -44,6 +47,7 @@ class ProfileService:
         organization_name=None,
         registration_number=None,
         address=None,
+        phone=None,
     ):
         data = {}
 
@@ -55,6 +59,9 @@ class ProfileService:
 
         if address is not None:
             data["address"] = address
+
+        if phone is not None:
+            data["phone"] = phone
 
         return requests.patch(
             f"{BASE_URL}/profiles/ngo/me/",

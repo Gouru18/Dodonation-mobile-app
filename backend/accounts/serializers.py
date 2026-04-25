@@ -1,11 +1,13 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 import random
 from profiles.models import DonorProfile, NGOProfile, NGOPermitApplication
 from accounts.models import OTPCode
+from core.email_utils import send_otp_email
 
 User = get_user_model()
 
@@ -32,22 +34,23 @@ class RegisterDonorSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         full_name = validated_data.pop('full_name')
-        
-        user = User.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data['email'],
-            password=validated_data['password'],
-            role='donor',
-            phone=validated_data.get('phone', ''),
-            is_active=True
-        )
 
-        DonorProfile.objects.create(user=user, full_name=full_name)
-        
-        # Send OTP
-        self.send_otp(user)
-        
-        return user
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=validated_data['username'],
+                email=validated_data['email'],
+                password=validated_data['password'],
+                role='donor',
+                phone=validated_data.get('phone', ''),
+                is_active=True
+            )
+
+            DonorProfile.objects.create(user=user, full_name=full_name)
+
+            # Keep OTP generation logic unchanged while ensuring failures roll back registration.
+            self.send_otp(user)
+
+            return user
 
     @staticmethod
     def send_otp(user):
@@ -60,10 +63,8 @@ class RegisterDonorSerializer(serializers.ModelSerializer):
             code=code,
             expires_at=expires_at
         )
-        
-        # TODO: Send OTP via email
-        # send_otp_email(user.email, code)
-        print(f"OTP for {user.email}: {code}")  # For debugging
+
+        send_otp_email(user.email, code)
 
 
 class RegisterNGOSerializer(serializers.ModelSerializer):
@@ -97,32 +98,33 @@ class RegisterNGOSerializer(serializers.ModelSerializer):
         organization_name = validated_data.pop('organization_name')
         registration_number = validated_data.pop('registration_number', '')
         permit_file = validated_data.pop('permit_file')
-        
-        user = User.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data['email'],
-            password=validated_data['password'],
-            role='ngo',
-            phone=validated_data.get('phone', ''),
-            is_active=False  # NGO must be verified by admin
-        )
 
-        ngo_profile = NGOProfile.objects.create(
-            user=user,
-            organization_name=organization_name,
-            registration_number=registration_number
-        )
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=validated_data['username'],
+                email=validated_data['email'],
+                password=validated_data['password'],
+                role='ngo',
+                phone=validated_data.get('phone', ''),
+                is_active=False  # NGO must be verified by admin
+            )
 
-        NGOPermitApplication.objects.create(
-            ngo=ngo_profile,
-            permit_file=permit_file,
-            status='pending',
-        )
-        
-        # Send OTP
-        self.send_otp(user)
-        
-        return user
+            ngo_profile = NGOProfile.objects.create(
+                user=user,
+                organization_name=organization_name,
+                registration_number=registration_number
+            )
+
+            NGOPermitApplication.objects.create(
+                ngo=ngo_profile,
+                permit_file=permit_file,
+                status='pending',
+            )
+
+            # Keep OTP generation logic unchanged while ensuring failures roll back registration.
+            self.send_otp(user)
+
+            return user
 
     @staticmethod
     def send_otp(user):
@@ -135,10 +137,8 @@ class RegisterNGOSerializer(serializers.ModelSerializer):
             code=code,
             expires_at=expires_at
         )
-        
-        # TODO: Send OTP via email
-        # send_otp_email(user.email, code)
-        print(f"OTP for {user.email}: {code}")  # For debugging
+
+        send_otp_email(user.email, code)
 
 
 class LoginSerializer(serializers.Serializer):

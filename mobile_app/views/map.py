@@ -34,14 +34,6 @@ def map_view(page: ft.Page):
         size=16,
         color="#4B5563",
     )
-    save_notice = ft.Container(
-        visible=False,
-        padding=16,
-        border_radius=16,
-        bgcolor="#ECFDF3",
-        border=ft.Border.all(1, "#ABEFC6"),
-    )
-
     lat = auth_input("Latitude", ft.Icons.MY_LOCATION)
     lon = auth_input("Longitude", ft.Icons.PLACE)
     address = auth_input("Meeting Address", ft.Icons.HOME, multiline=True)
@@ -52,6 +44,47 @@ def map_view(page: ft.Page):
 
     marker_layer = None
     map_control = None
+
+    def normalize_coordinate(value):
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        try:
+            return f"{float(raw):.6f}"
+        except (TypeError, ValueError):
+            return raw
+
+    def close_dialog():
+        if page.dialog:
+            page.dialog.open = False
+            page.update()
+
+    def open_dialog(title, content_controls, actions, modal=True):
+        dialog = ft.AlertDialog(
+            modal=modal,
+            title=ft.Text(title, weight=ft.FontWeight.BOLD),
+            content=ft.Column(content_controls, tight=True, spacing=10),
+            actions=actions,
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.dialog = dialog
+        dialog.open = True
+        page.update()
+
+    def show_confirm_notice():
+        open_dialog(
+            "Save Meeting Location",
+            [
+                muted_text("Save this meeting location for the physical handoff?"),
+                muted_text(f"Latitude: {lat.value or 'Not selected'}"),
+                muted_text(f"Longitude: {lon.value or 'Not selected'}"),
+                muted_text(f"Address: {address.value or 'Not provided'}"),
+            ],
+            [
+                ft.TextButton("Cancel", on_click=lambda e: close_dialog()),
+                ft.TextButton("Confirm Save", on_click=lambda e: persist_location()),
+            ],
+        )
 
     if ftm:
         marker_layer = ftm.MarkerLayer(markers=[])
@@ -116,24 +149,10 @@ def map_view(page: ft.Page):
         else:
             location_text.value = "You can pin the location only after the online meeting is completed."
             state["location_saved"] = False
-            save_notice.visible = False
-            save_notice.content = None
 
         if lat.value and lon.value:
             state["location_saved"] = True
-            save_notice.visible = True
-            save_notice.content = ft.Column(
-                [
-                    ft.Text(
-                        "Meeting Location Saved",
-                        size=16,
-                        weight=ft.FontWeight.BOLD,
-                        color="#166534",
-                    ),
-                    muted_text("A physical handoff point has already been saved for this meeting."),
-                ],
-                spacing=8,
-            )
+            location_text.value = "A physical handoff point has already been saved for this meeting."
 
         if marker_layer and map_control and lat.value and lon.value:
             point = ftm.MapLatitudeLongitude(float(lat.value), float(lon.value))
@@ -192,6 +211,14 @@ def map_view(page: ft.Page):
             show_error(page, "Pick a location on the map first.")
             return
 
+        show_confirm_notice()
+
+    def persist_location():
+        if not AppState.active_meeting_id:
+            show_error(page, "No active meeting selected.")
+            return
+
+        close_dialog()
         response = MeetingService.set_meeting_location(
             AppState.active_meeting_id,
             latitude=lat.value,
@@ -200,22 +227,37 @@ def map_view(page: ft.Page):
         )
 
         if response.status_code == 200:
+            verify_response = MeetingService.get_meeting_detail(AppState.active_meeting_id)
+            if verify_response.status_code != 200:
+                show_error(page, "Location was submitted, but verification failed when reloading the meeting.")
+                return
+
+            saved_meeting = verify_response.json()
+            saved_lat = normalize_coordinate(saved_meeting.get("meeting_latitude"))
+            saved_lon = normalize_coordinate(saved_meeting.get("meeting_longitude"))
+            saved_address = saved_meeting.get("meeting_address") or ""
+            if (
+                saved_lat != normalize_coordinate(lat.value)
+                or saved_lon != normalize_coordinate(lon.value)
+                or saved_address != (address.value or "")
+                or saved_meeting.get("status") != "location_pinned"
+            ):
+                show_error(page, "Meeting location save could not be confirmed from the backend.")
+                return
+
             state["can_pin_location"] = False
             state["location_saved"] = True
             show_success(page, "Meeting point pinned successfully.")
             location_text.value = "Meeting location pinned successfully."
-            save_notice.visible = True
-            save_notice.content = ft.Column(
+            open_dialog(
+                "Location Saved",
                 [
-                    ft.Text(
-                        "Meeting Location Saved",
-                        size=16,
-                        weight=ft.FontWeight.BOLD,
-                        color="#166534",
-                    ),
                     muted_text("The meeting point is saved. Return to Meetings to continue the handoff workflow."),
+                    muted_text(f"Latitude: {saved_lat}"),
+                    muted_text(f"Longitude: {saved_lon}"),
+                    muted_text(f"Address: {saved_address or 'Not provided'}"),
                 ],
-                spacing=8,
+                [ft.TextButton("OK", on_click=lambda e: close_dialog())],
             )
             page.update()
         else:
@@ -284,7 +326,6 @@ def map_view(page: ft.Page):
                                 wrap=True,
                                 spacing=12,
                             ),
-                            save_notice,
                             muted_text(
                                 "Either the donor or NGO can pin the physical handoff point after the online meeting is completed."
                             ),

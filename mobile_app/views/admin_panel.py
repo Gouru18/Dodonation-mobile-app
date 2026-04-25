@@ -1,7 +1,7 @@
 import asyncio
 import os
 import webbrowser
-from datetime import datetime
+from datetime import datetime, date
 
 import flet as ft
 
@@ -77,6 +77,36 @@ def admin_panel_view(page: ft.Page):
         "selected_ngo_profile": None,
         "selected_permit": None,
     }
+
+    def validate_non_past_date(value, label):
+        raw = (value or "").strip()
+        if not raw:
+            return None
+        try:
+            parsed_date = datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValueError(f"{label} must use YYYY-MM-DD format.") from exc
+        if parsed_date < date.today():
+            raise ValueError(f"{label} cannot be in the past.")
+        return parsed_date
+
+    def validate_non_past_datetime(value, label):
+        raw = (value or "").strip()
+        if not raw:
+            raise ValueError(f"{label} is required.")
+        normalized = raw.replace("T", " ")
+        parsed_value = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                parsed_value = datetime.strptime(normalized, fmt)
+                break
+            except ValueError:
+                continue
+        if parsed_value is None:
+            raise ValueError(f"{label} must use YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS format.")
+        if parsed_value < datetime.now().replace(second=0, microsecond=0):
+            raise ValueError(f"{label} cannot be in the past.")
+        return parsed_value
 
     root_host = ft.Container(expand=True, bgcolor=colors["bg"])
 
@@ -1126,6 +1156,7 @@ def admin_panel_view(page: ft.Page):
             if not donor_user:
                 show_message(page, "Select an existing donor username.", "red")
                 return False
+            validate_non_past_date(donation_expiry.value, "Expiry date")
             api_status = "pending" if donation_status.value == "available" else donation_status.value
             payload = {
                 "donor_id": donor_user["id"],
@@ -1214,6 +1245,7 @@ def admin_panel_view(page: ft.Page):
             if not claim_request_id:
                 show_message(page, "Select a claim request first, then schedule the meeting.", "red")
                 return False
+            validate_non_past_datetime(meeting_scheduled_time.value, "Scheduled time")
             payload = {
                 "claim_request_id": claim_request_id,
                 "scheduled_time": meeting_scheduled_time.value,

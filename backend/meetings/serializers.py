@@ -57,6 +57,16 @@ class MeetingSerializer(serializers.ModelSerializer):
     def get_can_pin_location(self, obj):
         return obj.status == 'online_completed'
 
+    def validate_scheduled_time(self, value):
+        if value < timezone.now().replace(second=0, microsecond=0):
+            raise serializers.ValidationError("Scheduled time cannot be in the past.")
+        return value
+
+    def validate_meeting_link(self, value):
+        if value and "meet.google.com" not in str(value).lower():
+            raise serializers.ValidationError("Please provide a valid Google Meet link.")
+        return value
+
     def get_is_online_expired(self, obj):
         return (
             obj.status == 'online_scheduled'

@@ -120,10 +120,22 @@ class DonationService:
         )
 
     @staticmethod
-    def claim_donation(donation_id, message=""):
+    def claim_donation(donation_id, message="", image=None):
+        data = {"message": message}
+
+        if image:
+            with open(image, "rb") as image_file:
+                return requests.post(
+                    f"{BASE_URL}/donations/{donation_id}/claim/",
+                    data=data,
+                    files={"image": image_file},
+                    headers=AuthService.auth_headers(),
+                    timeout=DonationService.TIMEOUT,
+                )
+
         return requests.post(
             f"{BASE_URL}/donations/{donation_id}/claim/",
-            json={"message": message},
+            json=data,
             headers=AuthService.auth_headers(),
             timeout=DonationService.TIMEOUT,
         )

@@ -121,7 +121,7 @@ def otp_view(page: ft.Page):
         [
             muted_text("Enter the OTP linked to your registration email."),
             status_chip("Donor: access after OTP verification", color="#027A48"),
-            status_chip("NGO: access only after admin reviews the permit", color="#B54708"),
+            status_chip("NGO: access only after admin reviews the permit", color="#073D1C"),
             email,
             otp_code,
             primary_button("Verify OTP", verify_otp),

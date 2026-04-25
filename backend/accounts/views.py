@@ -1,4 +1,4 @@
-from rest_framework import generics, status, viewsets
+from rest_framework import generics, serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -7,11 +7,15 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
+from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
+from datetime import timedelta
+import random
 
 from .serializers import RegisterDonorSerializer, RegisterNGOSerializer, LoginSerializer, UserSerializer
 from .models import OTPCode
-from core.email_utils import send_otp_email
+from core.email_utils import EmailDeliveryError, send_otp_email
 
 User = get_user_model()
 
@@ -44,6 +48,50 @@ class RegisterDonorView(generics.CreateAPIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def create(self, request, *args, **kwargs):
+        email = (request.data.get('email') or '').strip()
+        username = (request.data.get('username') or '').strip()
+        existing_user = None
+
+        if email or username:
+            query = Q()
+            if email:
+                query |= Q(email__iexact=email)
+            if username:
+                query |= Q(username__iexact=username)
+            existing_user = User.objects.filter(query).order_by('-id').first()
+
+        if (
+            existing_user
+            and existing_user.role == 'donor'
+            and not existing_user.is_email_verified
+        ):
+            try:
+                with transaction.atomic():
+                    code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                    expires_at = timezone.now() + timedelta(minutes=10)
+
+                    OTPCode.objects.create(
+                        user=existing_user,
+                        code=code,
+                        expires_at=expires_at
+                    )
+
+                    send_otp_email(existing_user.email, code)
+            except EmailDeliveryError as exc:
+                return Response(
+                    {'error': str(exc)},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            return Response(
+                {
+                    'message': 'Donor account already exists but is awaiting OTP verification. A new OTP has been sent to your email.',
+                    'user': UserSerializer(existing_user).data,
+                    'otp_resent': True,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             return Response(
@@ -56,6 +104,23 @@ class RegisterDonorView(generics.CreateAPIView):
 
         try:
             self.perform_create(serializer)
+        except EmailDeliveryError as exc:
+            return Response(
+                {
+                    'message': str(exc),
+                    'errors': {'email': [str(exc)]},
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except serializers.ValidationError as exc:
+            detail = exc.detail if hasattr(exc, 'detail') else {'detail': [str(exc)]}
+            return Response(
+                {
+                    'message': _flatten_serializer_errors(detail),
+                    'errors': detail,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except IntegrityError as exc:
             return Response(
                 {
@@ -81,6 +146,51 @@ class RegisterNGOView(generics.CreateAPIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def create(self, request, *args, **kwargs):
+        email = (request.data.get('email') or '').strip()
+        username = (request.data.get('username') or '').strip()
+        existing_user = None
+
+        if email or username:
+            query = Q()
+            if email:
+                query |= Q(email__iexact=email)
+            if username:
+                query |= Q(username__iexact=username)
+            existing_user = User.objects.filter(query).order_by('-id').first()
+
+        if (
+            existing_user
+            and existing_user.role == 'ngo'
+            and not existing_user.is_active
+            and not existing_user.is_email_verified
+        ):
+            try:
+                with transaction.atomic():
+                    code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                    expires_at = timezone.now() + timedelta(minutes=10)
+
+                    OTPCode.objects.create(
+                        user=existing_user,
+                        code=code,
+                        expires_at=expires_at
+                    )
+
+                    send_otp_email(existing_user.email, code)
+            except EmailDeliveryError as exc:
+                return Response(
+                    {'error': str(exc)},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            return Response(
+                {
+                    'message': 'NGO account already exists but is awaiting OTP verification. A new OTP has been sent to your email.',
+                    'user': UserSerializer(existing_user).data,
+                    'otp_resent': True,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             return Response(
@@ -93,6 +203,23 @@ class RegisterNGOView(generics.CreateAPIView):
 
         try:
             self.perform_create(serializer)
+        except EmailDeliveryError as exc:
+            return Response(
+                {
+                    'message': str(exc),
+                    'errors': {'email': [str(exc)]},
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except serializers.ValidationError as exc:
+            detail = exc.detail if hasattr(exc, 'detail') else {'detail': [str(exc)]}
+            return Response(
+                {
+                    'message': _flatten_serializer_errors(detail),
+                    'errors': detail,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except IntegrityError as exc:
             return Response(
                 {
@@ -233,16 +360,23 @@ class RequestOTPView(APIView):
         import random
         from datetime import timedelta
         
-        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-        expires_at = timezone.now() + timedelta(minutes=10)
-        
-        OTPCode.objects.create(
-            user=user,
-            code=code,
-            expires_at=expires_at
-        )
+        try:
+            with transaction.atomic():
+                code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                expires_at = timezone.now() + timedelta(minutes=10)
+                
+                OTPCode.objects.create(
+                    user=user,
+                    code=code,
+                    expires_at=expires_at
+                )
 
-        send_otp_email(user.email, code)
+                send_otp_email(user.email, code)
+        except EmailDeliveryError as exc:
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         return Response(
             {'message': 'OTP sent to email'},

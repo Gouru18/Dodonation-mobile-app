@@ -1,4 +1,5 @@
 import asyncio
+import re
 import flet as ft
 from services.auth_service import AuthService
 from utils.app_state import AppState
@@ -14,6 +15,22 @@ from utils.helpers import (
     show_error,
     show_success,
 )
+
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _inline_error():
+    return ft.Text("", color="#B42318", size=12, visible=False)
+
+
+def _field_block(field, error_label):
+    return ft.Column([field, error_label], spacing=4)
+
+
+def _set_error(field, error_label, message):
+    field.error_text = message
+    error_label.value = message or ""
+    error_label.visible = bool(message)
 
 
 def _format_error_message(error_data):
@@ -32,17 +49,77 @@ def _format_error_message(error_data):
     return str(error_data)
 
 
+def _validate_required(value, label):
+    if not (value or "").strip():
+        return f"{label} is required."
+    return None
+
+
+def _validate_email(value):
+    value = (value or "").strip()
+    if not value:
+        return "Email is required."
+    if not EMAIL_PATTERN.match(value):
+        return "Enter a valid email address."
+    return None
+
+def _validate_password(value):
+    value = value or ""
+    if not value:
+        return "Password is required."
+    if len(value) < 8:
+        return "Password must be at least 8 characters."
+    return None
+
+def _validate_confirm_password(password_value, confirm_value):
+    if not (confirm_value or ""):
+        return "Confirm password is required."
+    if (password_value or "") != (confirm_value or ""):
+        return "Passwords do not match."
+    return None
+
 def register_donor_view(page: ft.Page):
     username = auth_input("Username", ft.Icons.PERSON)
     full_name = auth_input("Full Name", ft.Icons.BADGE)
     email = auth_input("Email", ft.Icons.EMAIL)
     phone = auth_input("Phone (Optional)", ft.Icons.PHONE)
     password = auth_input("Password", ft.Icons.LOCK, password=True)
+    confirm_password = auth_input("Confirm Password", ft.Icons.LOCK_OUTLINE, password=True)
+    username_error = _inline_error()
+    full_name_error = _inline_error()
+    email_error = _inline_error()
+    password_error = _inline_error()
+    confirm_password_error = _inline_error()
+    submit_button = primary_button("Create Donor Account", None)
+
+    def refresh_form(*_, update_page=True):
+        username_message = _validate_required(username.value, "Username")
+        full_name_message = _validate_required(full_name.value, "Full name")
+        email_message = _validate_email(email.value)
+        password_message = _validate_password(password.value)
+        confirm_password_message = _validate_confirm_password(password.value, confirm_password.value)
+        _set_error(username, username_error, username_message)
+        _set_error(full_name, full_name_error, full_name_message)
+        _set_error(email, email_error, email_message)
+        _set_error(password, password_error, password_message)
+        _set_error(confirm_password, confirm_password_error, confirm_password_message)
+        submit_button.disabled = any(
+            [
+                username_message,
+                full_name_message,
+                email_message,
+                password_message,
+                confirm_password_message,
+            ]
+        )
+        if update_page:
+            page.update()
 
     async def register(e):
         try:
-            if not username.value or not full_name.value or not email.value or not password.value:
-                show_error(page, "Please fill all required fields")
+            refresh_form()
+            if submit_button.disabled:
+                show_error(page, "Please fill all required fields correctly")
                 return
 
             response = await asyncio.to_thread(
@@ -71,16 +148,25 @@ def register_donor_view(page: ft.Page):
     async def go_back(e):
         await page.push_route("/role-selection")
 
+    username.on_change = refresh_form
+    full_name.on_change = refresh_form
+    email.on_change = refresh_form
+    password.on_change = refresh_form
+    confirm_password.on_change = refresh_form
+    submit_button.on_click = register
+    submit_button.disabled = True
+
     card = form_container(
         "Register as Donor",
         [
             muted_text("Create a donor account to post donations and manage handoff coordination."),
-            username,
-            full_name,
-            email,
+            _field_block(username, username_error),
+            _field_block(full_name, full_name_error),
+            _field_block(email, email_error),
             phone,
-            password,
-            primary_button("Create Donor Account", register),
+            _field_block(password, password_error),
+            _field_block(confirm_password, confirm_password_error),
+            submit_button,
             ft.Row(
                 [subtle_text_button("Back", go_back)],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -89,6 +175,7 @@ def register_donor_view(page: ft.Page):
         subtitle="Donors can create donations, accept claims, and schedule meetings.",
     )
 
+    refresh_form(update_page=False)
     return auth_scaffold(page, "/register/donor", "Donor Registration", card)
 
 
@@ -99,9 +186,44 @@ def register_ngo_view(page: ft.Page):
     registration_number = auth_input("Registration Number (Optional)", ft.Icons.NUMBERS)
     phone = auth_input("Phone (Optional)", ft.Icons.PHONE)
     password = auth_input("Password", ft.Icons.LOCK, password=True)
+    confirm_password = auth_input("Confirm Password", ft.Icons.LOCK_OUTLINE, password=True)
+    username_error = _inline_error()
+    organization_name_error = _inline_error()
+    email_error = _inline_error()
+    password_error = _inline_error()
+    confirm_password_error = _inline_error()
+    permit_error = _inline_error()
+    submit_button = primary_button("Create NGO Account", None)
 
     permit_file_label = ft.Text("No permit selected", color="#6B7280")
     selected_permit_path = {"value": None}
+
+    def refresh_form(*_, update_page=True):
+        username_message = _validate_required(username.value, "Username")
+        organization_name_message = _validate_required(organization_name.value, "Organization name")
+        email_message = _validate_email(email.value)
+        password_message = _validate_password(password.value)
+        confirm_password_message = _validate_confirm_password(password.value, confirm_password.value)
+        permit_message = None if selected_permit_path["value"] else "Permit document is required."
+        _set_error(username, username_error, username_message)
+        _set_error(organization_name, organization_name_error, organization_name_message)
+        _set_error(email, email_error, email_message)
+        _set_error(password, password_error, password_message)
+        _set_error(confirm_password, confirm_password_error, confirm_password_message)
+        permit_error.value = permit_message or ""
+        permit_error.visible = bool(permit_message)
+        submit_button.disabled = any(
+            [
+                username_message,
+                organization_name_message,
+                email_message,
+                password_message,
+                confirm_password_message,
+                permit_message,
+            ]
+        )
+        if update_page:
+            page.update()
 
     async def pick_permit(e):
         def choose_file():
@@ -132,18 +254,13 @@ def register_ngo_view(page: ft.Page):
             permit_file_label.value = os.path.basename(file_path)
         else:
             permit_file_label.value = "No permit selected"
-        page.update()
+        refresh_form()
 
     async def register(e):
         try:
-            if (
-                not username.value
-                or not organization_name.value
-                or not email.value
-                or not password.value
-                or not selected_permit_path["value"]
-            ):
-                show_error(page, "Username, organization, email, password, and permit are required.")
+            refresh_form()
+            if submit_button.disabled:
+                show_error(page, "Username, organization, email, password, confirm password, and permit are required.")
                 return
 
             response = await asyncio.to_thread(
@@ -174,6 +291,14 @@ def register_ngo_view(page: ft.Page):
     async def go_back(e):
         await page.push_route("/role-selection")
 
+    username.on_change = refresh_form
+    organization_name.on_change = refresh_form
+    email.on_change = refresh_form
+    password.on_change = refresh_form
+    confirm_password.on_change = refresh_form
+    submit_button.on_click = register
+    submit_button.disabled = True
+
     permit_row = ft.Container(
         padding=16,
         border_radius=16,
@@ -198,7 +323,7 @@ def register_ngo_view(page: ft.Page):
                     spacing=12,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                status_chip("Required for NGO registration", color="#B54708"),
+                #status_chip("Required for NGO registration", color="#073D1C"),
             ],
             spacing=12,
         ),
@@ -208,14 +333,16 @@ def register_ngo_view(page: ft.Page):
         "Register as NGO",
         [
             muted_text("Create an NGO account, upload your permit, verify OTP, and wait for admin approval."),
-            username,
-            organization_name,
-            email,
+            _field_block(username, username_error),
+            _field_block(organization_name, organization_name_error),
+            _field_block(email, email_error),
             registration_number,
             phone,
-            password,
+            _field_block(password, password_error),
+            _field_block(confirm_password, confirm_password_error),
             permit_row,
-            primary_button("Create NGO Account", register),
+            permit_error,
+            submit_button,
             ft.Row(
                 [subtle_text_button("Back", go_back)],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -224,4 +351,5 @@ def register_ngo_view(page: ft.Page):
         subtitle="NGO accounts require permit approval before they can access the full app.",
     )
 
+    refresh_form(update_page=False)
     return auth_scaffold(page, "/register/ngo", "NGO Registration", card)

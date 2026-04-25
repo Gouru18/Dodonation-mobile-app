@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 from .models import Donation, ClaimRequest
 from accounts.serializers import UserSerializer
 
@@ -19,6 +20,11 @@ class DonationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['donor'] = self.context['request'].user
         return super().create(validated_data)
+
+    def validate_expiry_date(self, value):
+        if value and value < timezone.localdate():
+            raise serializers.ValidationError("Expiry date cannot be in the past.")
+        return value
 
     def get_feed_status(self, obj):
         """

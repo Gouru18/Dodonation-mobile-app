@@ -27,7 +27,7 @@ def role_selection_view(page: ft.Page):
                 "Choose the account type that best matches how you will use the app."
             ),
             status_chip("Donors can post donations and review claims", color="#027A48"),
-            status_chip("NGOs must upload a permit and wait for approval", color="#B54708"),
+            status_chip("NGOs must upload a permit and wait for approval", color="#073D1C"),
             role_card(
                 "Donor",
                 "Post donations, manage claims, schedule meetings, and set handoff locations.",

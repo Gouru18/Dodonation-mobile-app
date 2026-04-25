@@ -18,6 +18,35 @@ from utils.helpers import (
 )
 
 
+def _inline_error():
+    return ft.Text("", color="#B42318", size=12, visible=False)
+
+
+def _field_block(field, error_label):
+    return ft.Column([field, error_label], spacing=4)
+
+
+def _set_inline_error(field, error_label, message):
+    field.error_text = message
+    error_label.value = message or ""
+    error_label.visible = bool(message)
+
+
+def _validate_phone(value):
+    raw = (value or "").strip()
+    if not raw:
+        return None
+
+    allowed = set("0123456789+ -()")
+    if any(char not in allowed for char in raw):
+        return "Phone number can contain digits, spaces, +, -, and parentheses only."
+
+    if sum(char.isdigit() for char in raw) < 7:
+        return "Enter a valid phone number with at least 7 digits."
+
+    return None
+
+
 def profile_view(page: ft.Page):
     user = AuthService.user or {}
     is_donor = user.get("role") == "donor"
@@ -25,6 +54,8 @@ def profile_view(page: ft.Page):
     full_name = auth_input("Full Name", ft.Icons.PERSON)
     organization_name = auth_input("Organization Name", ft.Icons.BUSINESS)
     registration_number = auth_input("Registration Number", ft.Icons.BADGE)
+    phone = auth_input("Phone Number", ft.Icons.PHONE)
+    phone_error = _inline_error()
     address = auth_input("Address", ft.Icons.LOCATION_ON, multiline=True)
     address.min_lines = 3
 
@@ -33,6 +64,15 @@ def profile_view(page: ft.Page):
         f"Role: {'Donor' if is_donor else 'NGO'}",
         color="#1D4ED8",
     )
+
+    def refresh_form(*_, update_page=True):
+        phone_message = _validate_phone(phone.value)
+        _set_inline_error(phone, phone_error, phone_message)
+        if update_page:
+            page.update()
+
+    async def persist_user_state():
+        await AuthService.persist_session(page)
 
     def load_profile():
         response = (
@@ -64,23 +104,42 @@ def profile_view(page: ft.Page):
             else:
                 info_message.value = "Permit not uploaded yet."
 
+        phone.value = (
+            data.get("phone", "")
+            or (data.get("user") or {}).get("phone", "")
+            or user.get("phone", "")
+        )
         address.value = data.get("address", "")
+        refresh_form(update_page=False)
         page.update()
 
     def save_profile(e):
+        phone_message = _validate_phone(phone.value)
+        _set_inline_error(phone, phone_error, phone_message)
+        page.update()
+
+        if phone_message:
+            show_error(page, "Please fix the highlighted phone number field.")
+            return
+
         if is_donor:
             response = ProfileService.update_donor_profile(
                 full_name=full_name.value,
                 address=address.value,
+                phone=phone.value.strip(),
             )
         else:
             response = ProfileService.update_ngo_profile(
                 organization_name=organization_name.value,
                 registration_number=registration_number.value,
                 address=address.value,
+                phone=phone.value.strip(),
             )
 
         if response.status_code == 200:
+            if AuthService.user is not None:
+                AuthService.user["phone"] = phone.value.strip()
+                page.run_task(persist_user_state)
             show_success(page, "Profile updated.")
             load_profile()
         else:
@@ -110,6 +169,7 @@ def profile_view(page: ft.Page):
 
     profile_controls.extend(
         [
+            _field_block(phone, phone_error),
             address,
             ft.Row(
                 [
@@ -132,6 +192,7 @@ def profile_view(page: ft.Page):
         ]
     )
 
+    phone.on_change = refresh_form
     return ft.View(
         route="/profile",
         appbar=build_appbar("My Profile", go_back),

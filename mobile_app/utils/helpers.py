@@ -78,6 +78,7 @@ def auth_input(label, icon=None, password=False, multiline=False):
         bgcolor=INPUT_BG,
         border_color=CARD_BORDER,
         focused_border_color=PRIMARY_GREEN,
+        error_style=ft.TextStyle(color=DANGER, size=12),
         content_padding=ft.Padding.symmetric(horizontal=14, vertical=14),
     )
 

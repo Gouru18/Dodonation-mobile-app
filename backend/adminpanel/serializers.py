@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 
 from accounts.models import User, OTPCode
 from donations.models import Donation, ClaimRequest
@@ -194,6 +195,11 @@ class AdminDonationSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.image.url) if request else obj.image.url
         return None
 
+    def validate_expiry_date(self, value):
+        if value and value < timezone.localdate():
+            raise serializers.ValidationError("Expiry date cannot be in the past.")
+        return value
+
 
 class AdminDonationSummarySerializer(serializers.ModelSerializer):
     donor = AdminUserSummarySerializer(read_only=True)
@@ -258,3 +264,8 @@ class AdminMeetingSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_scheduled_time(self, value):
+        if value < timezone.now().replace(second=0, microsecond=0):
+            raise serializers.ValidationError("Scheduled time cannot be in the past.")
+        return value

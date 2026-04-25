@@ -1,10 +1,39 @@
 from django.core.mail import send_mail
 from django.conf import settings
+import logging
+
+
+logger = logging.getLogger(__name__)
+
+EMAIL_PLACEHOLDERS = {
+    'your_gmail_address@gmail.com',
+    'your_16_character_gmail_app_password',
+}
+
+
+class EmailDeliveryError(Exception):
+    """Raised when an email cannot be delivered."""
+
+
+def _ensure_email_settings_configured():
+    if (
+        settings.EMAIL_HOST_USER
+        and settings.EMAIL_HOST_PASSWORD
+        and settings.EMAIL_HOST_USER not in EMAIL_PLACEHOLDERS
+        and settings.EMAIL_HOST_PASSWORD not in EMAIL_PLACEHOLDERS
+    ):
+        return
+
+    raise EmailDeliveryError(
+        "Email service is not configured. Set EMAIL_HOST_USER and a Gmail App Password in environment variables."
+    )
 
 
 def send_otp_email(email, otp_code):
     """Send OTP code via email"""
-    subject = "Your Dodonation OTP Code"
+    _ensure_email_settings_configured()
+
+    subject = "Your OTP Code"
     message = (
         f"Hello,\n\n"
         f"Your One-Time Password (OTP) for Dodonation is: {otp_code}\n\n"
@@ -13,13 +42,21 @@ def send_otp_email(email, otp_code):
         f"Thank you,\nThe Dodonation Team"
     )
     
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+        return True
+    except Exception as exc:
+        logger.exception("Failed to send OTP email to %s", email)
+        detail = "Failed to send OTP email. Check Gmail App Password and SMTP settings."
+        if settings.DEBUG:
+            detail = f"{detail} Original error: {exc}"
+        raise EmailDeliveryError(detail) from exc
 
 
 def send_ngo_approval_email(ngo_email, organization_name):
@@ -34,13 +71,18 @@ def send_ngo_approval_email(ngo_email, organization_name):
         f"Thank you,\nThe Dodonation Team"
     )
     
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[ngo_email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[ngo_email],
+            fail_silently=False,
+        )
+        return True
+    except Exception:
+        logger.exception("Failed to send NGO approval email to %s", ngo_email)
+        return False
 
 
 def send_ngo_rejection_email(ngo_email, organization_name, rejection_reason):
@@ -54,13 +96,18 @@ def send_ngo_rejection_email(ngo_email, organization_name, rejection_reason):
         f"Thank you,\nThe Dodonation Team"
     )
     
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[ngo_email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[ngo_email],
+            fail_silently=False,
+        )
+        return True
+    except Exception:
+        logger.exception("Failed to send NGO rejection email to %s", ngo_email)
+        return False
 
 
 def send_donation_claimed_email(donor_email, donation_title, ngo_name):
@@ -74,13 +121,18 @@ def send_donation_claimed_email(donor_email, donation_title, ngo_name):
         f"Thank you,\nThe Dodonation Team"
     )
     
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[donor_email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[donor_email],
+            fail_silently=False,
+        )
+        return True
+    except Exception:
+        logger.exception("Failed to send donation claimed email to %s", donor_email)
+        return False
 
 
 def send_meeting_scheduled_email(donor_email, ngo_email, donation_title, scheduled_time):
@@ -94,10 +146,19 @@ def send_meeting_scheduled_email(donor_email, ngo_email, donation_title, schedul
         f"Thank you,\nThe Dodonation Team"
     )
     
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[donor_email, ngo_email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[donor_email, ngo_email],
+            fail_silently=False,
+        )
+        return True
+    except Exception:
+        logger.exception(
+            "Failed to send meeting scheduled email to %s and %s",
+            donor_email,
+            ngo_email,
+        )
+        return False
