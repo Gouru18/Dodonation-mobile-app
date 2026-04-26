@@ -61,6 +61,7 @@ Changes status:
 online_completed → location_pinned
 Step 4: Complete Physical Meeting
 Final confirmation
+The ngo can upload proof of receiving the donations after physical meeting (upload by using phone camera/ upload if running the app on a PC)
 
 Status:
 location_pinned → physical_completed
