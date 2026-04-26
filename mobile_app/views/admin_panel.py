@@ -955,6 +955,9 @@ def admin_panel_view(page: ft.Page):
     ngo_profile_search = input_field()
     ngo_profile_search.hint_text = "Search by organization or email"
     ngo_profile_username = input_field("Username")
+    ngo_profile_password = input_field("Password")
+    ngo_profile_password.password = True
+    ngo_profile_password.can_reveal_password = True
     ngo_profile_organization = input_field("Organization name")
     ngo_profile_registration = input_field("Registration number")
     ngo_profile_address = multiline_field("Address", "", 5)
@@ -962,6 +965,7 @@ def admin_panel_view(page: ft.Page):
     def clear_ngo_profile_form():
         state["selected_ngo_profile"] = None
         ngo_profile_username.value = ""
+        ngo_profile_password.value = ""
         ngo_profile_organization.value = ""
         ngo_profile_registration.value = ""
         ngo_profile_address.value = ""
@@ -969,6 +973,7 @@ def admin_panel_view(page: ft.Page):
     def load_ngo_profile_form(item):
         state["selected_ngo_profile"] = item
         ngo_profile_username.value = (item.get("user") or {}).get("username") or ""
+        ngo_profile_password.value = ""
         ngo_profile_organization.value = item.get("organization_name") or ""
         ngo_profile_registration.value = item.get("registration_number") or ""
         ngo_profile_address.value = item.get("address") or ""
@@ -1597,6 +1602,8 @@ def admin_panel_view(page: ft.Page):
             f"{'Change' if (state['selected_ngo_profile'] or {}).get('id') else 'Add'} ngo profile",
             [
                 field_row("Username:", ngo_profile_username),
+                field_row("Email:", admin_text(clean_value(((state["selected_ngo_profile"] or {}).get("user") or {}).get("email")))),
+                field_row("Password:", ngo_profile_password),
                 field_row("Organization name:", ngo_profile_organization),
                 field_row("Registration number:", ngo_profile_registration),
                 field_row("Address:", ngo_profile_address),
