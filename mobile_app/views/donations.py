@@ -47,8 +47,6 @@ FILTER_STATUS_OPTIONS = [
     ft.dropdown.Option(key="all", text="All Statuses"),
     ft.dropdown.Option(key="available", text="Available"),
     ft.dropdown.Option(key="pending", text="Pending"),
-    ft.dropdown.Option(key="claimed", text="Claimed"),
-    ft.dropdown.Option(key="rejected", text="Rejected"),
 ]
 
 

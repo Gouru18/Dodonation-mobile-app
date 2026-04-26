@@ -59,6 +59,18 @@ def send_otp_email(email, otp_code):
         raise EmailDeliveryError(detail) from exc
 
 
+def send_ngo_status_email(email, status, organization_name=None, rejection_reason=None):
+    """Send NGO status update email to an NGO."""
+    if status == 'approved':
+        return send_ngo_approval_email(email, organization_name or '')
+
+    return send_ngo_rejection_email(
+        email,
+        organization_name or '',
+        rejection_reason or 'No reason provided.',
+    )
+
+
 def send_ngo_approval_email(ngo_email, organization_name):
     """Send NGO approval email"""
     subject = f"Your NGO {organization_name} has been approved!"

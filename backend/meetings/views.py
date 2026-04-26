@@ -114,9 +114,9 @@ class MeetingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if meeting.scheduled_time and meeting.scheduled_time < timezone.now():
+        if meeting.scheduled_time and meeting.scheduled_time > timezone.now():
             return Response(
-                {'error': 'This online meeting time has passed. Please reschedule a new meeting link.'},
+                {'error': 'This online meeting is scheduled for the future. Mark it complete only after the scheduled time.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

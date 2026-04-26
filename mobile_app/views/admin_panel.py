@@ -151,6 +151,8 @@ def admin_panel_view(page: ft.Page):
             value=value,
             options=[ft.dropdown.Option(item, item.replace("_", " ").title()) for item in options],
             color=colors["text"],
+            text_style=ft.TextStyle(color=colors["text"]),
+            label_style=ft.TextStyle(color=colors["text"]),
             border_color=colors["border"],
             bgcolor="#161616",
             focused_border_color=colors["link"],

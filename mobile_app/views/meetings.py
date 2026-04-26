@@ -309,11 +309,11 @@ def meetings_view(page: ft.Page):
         return {
             "online_scheduled": "#1D4ED8",
             "online_completed": "#027A48",
-            "location_pinned": "#B54708",
+            "location_pinned": "#D65606",
             "physical_completed": "#027A48",
             "expired": "#B42318",
             "cancelled": "#B42318",
-        }.get(status_value, "#667085")
+        }.get(status_value, "#B9C2D5")
 
     def schedule_button_text():
         return "Reschedule Meeting" if reschedule_state["meeting_id"] else "Schedule Meeting"

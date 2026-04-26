@@ -25,9 +25,9 @@ def claims_view(page: ft.Page):
 
     def status_color(value):
         mapping = {
-            "pending": "#B54708",
+            "pending": "#FBBF24",
             "accepted": "#027A48",
-            "rejected": "#B42318",
+            "rejected": "#EF4444",
         }
         return mapping.get((value or "").lower(), "#667085")
 

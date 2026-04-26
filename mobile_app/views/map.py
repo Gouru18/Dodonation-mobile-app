@@ -34,6 +34,24 @@ def map_view(page: ft.Page):
         size=16,
         color="#4B5563",
     )
+    save_notice = ft.Container(
+        visible=False,
+        padding=16,
+        border_radius=16,
+        bgcolor="#ECFDF3",
+        border=ft.Border.all(1, "#ABEFC6"),
+        content=ft.Column(
+            [
+                ft.Text(
+                    "No meeting location has been pinned yet.",
+                    size=14,
+                    color="#166534",
+                ),
+                muted_text("The donor or NGO can pin the location after the online meeting is completed."),
+            ],
+            spacing=6,
+        ),
+    )
     lat = auth_input("Latitude", ft.Icons.MY_LOCATION)
     lon = auth_input("Longitude", ft.Icons.PLACE)
     address = auth_input("Meeting Address", ft.Icons.HOME, multiline=True)
@@ -44,6 +62,7 @@ def map_view(page: ft.Page):
 
     marker_layer = None
     map_control = None
+    current_dialog = None
 
     def normalize_coordinate(value):
         raw = str(value or "").strip()
@@ -55,11 +74,14 @@ def map_view(page: ft.Page):
             return raw
 
     def close_dialog():
-        if page.dialog:
-            page.dialog.open = False
+        nonlocal current_dialog
+        if current_dialog:
+            current_dialog.open = False
+            current_dialog = None
             page.update()
 
     def open_dialog(title, content_controls, actions, modal=True):
+        nonlocal current_dialog
         dialog = ft.AlertDialog(
             modal=modal,
             title=ft.Text(title, weight=ft.FontWeight.BOLD),
@@ -67,9 +89,8 @@ def map_view(page: ft.Page):
             actions=actions,
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        page.dialog = dialog
-        dialog.open = True
-        page.update()
+        current_dialog = dialog
+        page.show_dialog(dialog)
 
     def show_confirm_notice():
         open_dialog(
@@ -89,6 +110,32 @@ def map_view(page: ft.Page):
     if ftm:
         marker_layer = ftm.MarkerLayer(markers=[])
 
+        async def reverse_geocode(latitude, longitude):
+            try:
+                response = requests.get(
+                    "https://nominatim.openstreetmap.org/reverse",
+                    params={
+                        "lat": latitude,
+                        "lon": longitude,
+                        "format": "jsonv2",
+                    },
+                    headers={"User-Agent": "DodonationApp/1.0"},
+                    timeout=8,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    display_name = data.get("display_name")
+                    if display_name:
+                        address.value = display_name
+                        location_text.value = "Location selected and address resolved."
+                        page.update()
+                        return
+            except Exception:
+                pass
+
+            location_text.value = "Location selected from the map. Address could not be resolved."
+            page.update()
+
         def handle_map_tap(e):
             if not state["can_pin_location"]:
                 show_error(page, "This meeting is not ready for location pinning yet.")
@@ -106,6 +153,7 @@ def map_view(page: ft.Page):
                 )
             ]
             location_text.value = "Location selected from the map."
+            page.run_task(reverse_geocode, coordinates.latitude, coordinates.longitude)
             page.update()
 
         map_control = ftm.Map(
@@ -152,7 +200,25 @@ def map_view(page: ft.Page):
 
         if lat.value and lon.value:
             state["location_saved"] = True
+            save_notice.visible = True
+            save_notice.content = ft.Column(
+                [
+                    ft.Text(
+                        "Meeting Location Saved",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color="#166534",
+                    ),
+                    muted_text("A physical handoff point has already been saved for this meeting."),
+                ],
+                spacing=8,
+            )
             location_text.value = "A physical handoff point has already been saved for this meeting."
+        else:
+            save_notice.visible = False
+            save_notice.content = None
+
+        save_button.disabled = not state["can_pin_location"] or state["location_saved"]
 
         if marker_layer and map_control and lat.value and lon.value:
             point = ftm.MapLatitudeLongitude(float(lat.value), float(lon.value))
@@ -247,6 +313,7 @@ def map_view(page: ft.Page):
 
             state["can_pin_location"] = False
             state["location_saved"] = True
+            save_button.disabled = True
             show_success(page, "Meeting point pinned successfully.")
             location_text.value = "Meeting location pinned successfully."
             open_dialog(
@@ -261,10 +328,19 @@ def map_view(page: ft.Page):
             )
             page.update()
         else:
-            show_error(page, f"Could not save meeting location: {response.text}")
+            show_error(page, f"Could not save meeting location: {response.status_code} - {response.text}")
+            page.update()
 
     async def go_back(e):
         await page.push_route("/meetings")
+
+    save_button = primary_button(
+        "Save Meeting Location",
+        save_location,
+        width=220,
+        icon=ft.Icons.SAVE,
+    )
+    save_button.disabled = True
 
     page.run_task(load_meeting_context)
 
@@ -316,12 +392,7 @@ def map_view(page: ft.Page):
                                         width=190,
                                         icon=ft.Icons.MY_LOCATION,
                                     ),
-                                    primary_button(
-                                        "Save Meeting Location",
-                                        save_location,
-                                        width=220,
-                                        icon=ft.Icons.SAVE,
-                                    ),
+                                    save_button,
                                 ],
                                 wrap=True,
                                 spacing=12,
