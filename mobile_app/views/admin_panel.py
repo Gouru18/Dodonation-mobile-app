@@ -114,14 +114,29 @@ def admin_panel_view(page: ft.Page):
     def admin_text(value, size=14, color=None, weight=None):
         return ft.Text(value, size=size, color=color or colors["text"], weight=weight)
 
-    def nav_button(label, on_click):
-        return ft.TextButton(label, on_click=on_click, style=ft.ButtonStyle(color=colors["text"]))
+    def safe_click(on_click):
+        def handler(e):
+            try:
+                result = on_click(e)
+                if asyncio.iscoroutine(result):
+                    asyncio.create_task(result)
+                return result
+            except Exception as exc:
+                show_message(page, str(exc) or "Unexpected error.", "red")
+        return handler
+
+    def nav_button(label, on_click, bgcolor=None, color=colors["text"]):
+        return ft.TextButton(
+            label,
+            on_click=safe_click(on_click),
+            style=ft.ButtonStyle(bgcolor=bgcolor, color=color),
+        )
 
     def page_button(label, on_click, bgcolor="#4D819C", color=BUTTON_TEXT, width=None):
-        return ft.Button(label, on_click=on_click, bgcolor=bgcolor, color=color, width=width)
+        return ft.Button(label, on_click=safe_click(on_click), bgcolor=bgcolor, color=color, width=width)
 
     def text_link(label, on_click, color=None):
-        return ft.TextButton(label, on_click=on_click, style=ft.ButtonStyle(color=color or colors["link"]))
+        return ft.TextButton(label, on_click=safe_click(on_click), style=ft.ButtonStyle(color=color or colors["link"]))
 
     def input_field(label="", value=""):
         return ft.TextField(
@@ -278,6 +293,20 @@ def admin_panel_view(page: ft.Page):
 
     def set_section(section_name):
         state["section"] = section_name
+        if section_name == "users":
+            page.run_task(load_users)
+        elif section_name == "claims":
+            page.run_task(load_claims)
+        elif section_name == "donor_profiles":
+            page.run_task(load_donor_profiles)
+        elif section_name == "ngo_profiles":
+            page.run_task(load_ngo_profiles)
+        elif section_name == "permits":
+            page.run_task(load_permits)
+        elif section_name == "donations":
+            page.run_task(load_donations)
+        elif section_name == "meetings":
+            page.run_task(load_meetings)
         render()
         page.update()
 
@@ -390,22 +419,32 @@ def admin_panel_view(page: ft.Page):
                 spacing=0,
             )
 
-        header_row = [
+        header_controls = [
             admin_text("Django administration", size=20 if is_mobile else 24, color="#F2D24A"),  # smaller title on mobile
         ]
+        if state["section"] != "home":
+            header_controls.append(nav_button("BACK", lambda e: set_section("home"), bgcolor="#3C3C3C"))
         if is_mobile and show_sidebar:
-            header_row.insert(0, ft.IconButton(ft.Icons.MENU, on_click=toggle_sidebar, icon_color=colors["text"]))
-        header_row.append(
-            ft.Row(
-                [
-                    nav_button("WELCOME, ADMIN.", lambda e: None),
-                    nav_button("VIEW SITE", lambda e: set_section("home")),
-                    nav_button("CHANGE PASSWORD", lambda e: set_section("home")),
-                    nav_button("LOG OUT", lambda e: page.run_task(logout)),
-                ],
-                spacing=4,
-            )
+            header_controls.insert(0, ft.IconButton(ft.Icons.MENU, on_click=toggle_sidebar, icon_color=colors["text"]))
+
+        header_actions = ft.Row(
+            [
+                nav_button("WELCOME, ADMIN.", lambda e: None),
+                nav_button("VIEW SITE", lambda e: page.go("/")),
+                nav_button("CHANGE PASSWORD", lambda e: show_message(page, "Change password is not available here.", colors["muted"])),
+                nav_button("LOG OUT", lambda e: page.run_task(logout)),
+            ],
+            spacing=4,
+            wrap=True,
         )
+
+        header_widget = ft.Column(
+            [
+                ft.Row(header_controls, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                header_actions,
+            ],
+            spacing=8,
+        ) if is_mobile else ft.Row(header_controls + [header_actions], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
         return ft.Container(
             expand=True,
@@ -415,10 +454,7 @@ def admin_panel_view(page: ft.Page):
                     ft.Container(
                         bgcolor=colors["header"],
                         padding=ft.Padding.only(left=12 if is_mobile else 18, right=12 if is_mobile else 18, top=12 if is_mobile else 16, bottom=12 if is_mobile else 16),  # reduced padding
-                        content=ft.Row(
-                            header_row,
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
+                        content=header_widget,
                     ),
                     build_breadcrumb(),
                     ft.Container(expand=True, content=body),
@@ -572,9 +608,10 @@ def admin_panel_view(page: ft.Page):
             spacing=0,
         )
         if is_mobile:
-            return ft.Container(
-                content=table_content,
+            return ft.Column(
+                [table_content],
                 scroll=ft.ScrollMode.AUTO,  # allow horizontal scroll
+                expand=True,
             )
         else:
             return table_content
@@ -633,7 +670,7 @@ def admin_panel_view(page: ft.Page):
             return ft.Column(
                 controls + [ft.Container(height=6), ft.Divider(color=colors["border"])],
                 spacing=6,
-                cross_alignment=ft.CrossAxisAlignment.START,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
             )
         else:
             controls = [
@@ -1352,18 +1389,25 @@ def admin_panel_view(page: ft.Page):
         state["section"] = section_name
         if section_name == "users":
             clear_user_form()
+            page.run_task(load_users)
         elif section_name == "claims":
             clear_claim_form()
+            page.run_task(load_claims)
         elif section_name == "donor_profiles":
             clear_donor_profile_form()
+            page.run_task(load_donor_profiles)
         elif section_name == "ngo_profiles":
             clear_ngo_profile_form()
+            page.run_task(load_ngo_profiles)
         elif section_name == "permits":
             clear_permit_form()
+            page.run_task(load_permits)
         elif section_name == "donations":
             clear_donation_form()
+            page.run_task(load_donations)
         elif section_name == "meetings":
             clear_meeting_form()
+            page.run_task(load_meetings)
         render()
         page.update()
 
@@ -1385,64 +1429,112 @@ def admin_panel_view(page: ft.Page):
 
     def users_page():
         items = filtered_users()
-        header_row = ft.Row(
+        is_mobile = page.width and page.width < 600
+
+        header_row = responsive_layout(
             [
                 page_button("Activate selected", lambda e: set_bulk_action_and_run("activate"), bgcolor=colors["green"]),
                 page_button("Suspend selected", lambda e: set_bulk_action_and_run("suspend"), bgcolor=colors["yellow"], color="#111111"),
                 page_button("Delete selected", lambda e: set_bulk_action_and_run("delete"), bgcolor=colors["danger"]),
             ],
             spacing=10,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        rows = []
-        all_selected = bool(items) and all(item.get("id") in state["selected_user_ids"] for item in items)
-        rows.append(
-            ft.Container(
-                bgcolor=colors["panel_alt"],
-                padding=10,
-                content=ft.Row(
+        def build_mobile_user_card(item):
+            permit = item.get("ngo_permit") or {}
+            selected = (state["selected_user"] or {}).get("id") == item.get("id")
+            return ft.Container(
+                bgcolor="#0B4D57" if selected else colors["panel"],
+                border=ft.Border(bottom=ft.BorderSide(1, colors["border"])),
+                padding=12,
+                content=ft.Column(
                     [
-                        ft.Container(
-                            width=44,
-                            content=ft.Checkbox(value=all_selected, on_change=lambda e: toggle_all_users(bool(e.control.value))),
+                        ft.Row(
+                            [
+                                ft.Checkbox(
+                                    value=item.get("id") in state["selected_user_ids"],
+                                    on_change=lambda e, user_id=item.get("id"): toggle_user_selection(user_id, bool(e.control.value)),
+                                ),
+                                ft.Column(
+                                    [
+                                        text_link(clean_value(item.get("username")), lambda e, item=item: select_user(item)),
+                                        admin_text(clean_value(item.get("role")).title(), size=12, color=colors["muted"]),
+                                    ],
+                                    spacing=4,
+                                ),
+                                ft.Container(expand=True),
+                                bool_badge(item.get("is_active")),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=12,
                         ),
-                        table_cell("USERNAME", 240),
-                        table_cell("EMAIL ADDRESS", 290),
-                        table_cell("ROLE", 120),
-                        table_cell("ACTIVE", 110),
-                        table_cell("PERMIT STATUS", 150),
+                        ft.Container(height=8),
+                        ft.Column(
+                            [
+                                admin_text(f"Email: {clean_value(item.get('email'))}", size=13, color=colors["text"]),
+                                admin_text(f"Permit: {permit_state_label(permit)}", size=13, color=colors["muted"]),
+                                admin_text(f"Phone: {clean_value(item.get('phone'))}", size=13, color=colors["muted"]),
+                            ],
+                            spacing=4,
+                        ),
                     ],
-                    spacing=0,
+                    spacing=10,
                 ),
             )
-        )
-        for item in items:
-            permit = item.get("ngo_permit") or {}
+
+        rows = []
+        if not is_mobile:
+            all_selected = bool(items) and all(item.get("id") in state["selected_user_ids"] for item in items)
             rows.append(
                 ft.Container(
-                    bgcolor="#0B4D57" if (state["selected_user"] or {}).get("id") == item.get("id") else colors["panel"],
-                    border=ft.Border(bottom=ft.BorderSide(1, colors["border"])),
+                    bgcolor=colors["panel_alt"],
                     padding=10,
                     content=ft.Row(
                         [
                             ft.Container(
                                 width=44,
-                                content=ft.Checkbox(
-                                    value=item.get("id") in state["selected_user_ids"],
-                                    on_change=lambda e, user_id=item.get("id"): toggle_user_selection(user_id, bool(e.control.value)),
-                                ),
+                                content=ft.Checkbox(value=all_selected, on_change=lambda e: toggle_all_users(bool(e.control.value))),
                             ),
-                            table_cell("", 240, control=text_link(clean_value(item.get("username")), lambda e, item=item: select_user(item))),
-                            table_cell(clean_value(item.get("email")), 290),
-                            table_cell(clean_value(item.get("role")), 120),
-                            table_cell("", 110, control=bool_badge(item.get("is_active"))),
-                            table_cell(permit_state_label(permit), 150),
+                            table_cell("USERNAME", 240),
+                            table_cell("EMAIL ADDRESS", 290),
+                            table_cell("ROLE", 120),
+                            table_cell("ACTIVE", 110),
+                            table_cell("PERMIT STATUS", 150),
                         ],
                         spacing=0,
                     ),
                 )
             )
+
+        for item in items:
+            if is_mobile:
+                rows.append(build_mobile_user_card(item))
+            else:
+                permit = item.get("ngo_permit") or {}
+                rows.append(
+                    ft.Container(
+                        bgcolor="#0B4D57" if (state["selected_user"] or {}).get("id") == item.get("id") else colors["panel"],
+                        border=ft.Border(bottom=ft.BorderSide(1, colors["border"])),
+                        padding=10,
+                        content=ft.Row(
+                            [
+                                ft.Container(
+                                    width=44,
+                                    content=ft.Checkbox(
+                                        value=item.get("id") in state["selected_user_ids"],
+                                        on_change=lambda e, user_id=item.get("id"): toggle_user_selection(user_id, bool(e.control.value)),
+                                    ),
+                                ),
+                                table_cell("", 240, control=text_link(clean_value(item.get("username")), lambda e, item=item: select_user(item))),
+                                table_cell(clean_value(item.get("email")), 290),
+                                table_cell(clean_value(item.get("role")), 120),
+                                table_cell("", 110, control=bool_badge(item.get("is_active"))),
+                                table_cell(permit_state_label(permit), 150),
+                            ],
+                            spacing=0,
+                        ),
+                    )
+                )
 
         filters = filter_panel(
             "FILTER",
@@ -1537,13 +1629,12 @@ def admin_panel_view(page: ft.Page):
                 search_bar(user_search, lambda e: page.run_task(load_users)),
                 header_row,
                 info_line(f"{len(state['selected_user_ids'])} of {len(items)} selected"),
-                ft.Row(
+                responsive_layout(
                     [
                         ft.Container(expand=True, content=ft.Column([*rows, info_line(f"{len(items)} users")], spacing=10)),
                         filters,
                     ],
                     spacing=24,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
                 ),
                 editor,
             ],
