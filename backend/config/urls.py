@@ -5,8 +5,7 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from donations.views import DonationViewSet, ClaimRequestViewSet
 from meetings.views import MeetingViewSet
-from django.http import HttpResponse, JsonResponse
-import base64
+from django.http import JsonResponse
 
 # Create a router and register viewsets
 router = DefaultRouter()
@@ -27,16 +26,7 @@ def api_root(request):
         }
     })
 
-def favicon(request):
-    favicon_bytes = base64.b64decode(
-        'AAABAAEAEBAAAAAAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAQAAAAAAAAAAAAAAAAAAAA'
-        'AAAAAAAA////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-    )
-    return HttpResponse(favicon_bytes, content_type='image/x-icon')
-
 urlpatterns = [
-    path('favicon.ico', favicon),
     path('', api_root, name='api-root'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),

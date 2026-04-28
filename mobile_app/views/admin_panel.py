@@ -76,6 +76,7 @@ def admin_panel_view(page: ft.Page):
         "selected_donor_profile": None,
         "selected_ngo_profile": None,
         "selected_permit": None,
+        "sidebar_visible": False,  # default to hidden on mobile
     }
 
     def validate_non_past_date(value, label):
@@ -146,6 +147,7 @@ def admin_panel_view(page: ft.Page):
         )
 
     def dropdown_field(label, options, value=None, width=280):
+        is_mobile = page.width and page.width < 600
         return ft.Dropdown(
             label=label,
             value=value,
@@ -156,7 +158,7 @@ def admin_panel_view(page: ft.Page):
             border_color=colors["border"],
             bgcolor="#161616",
             focused_border_color=colors["link"],
-            width=width,
+            width=width if not is_mobile else None,
         )
 
     def panel(content, padding=16, bgcolor=None, expand=False, width=None):
@@ -203,6 +205,13 @@ def admin_panel_view(page: ft.Page):
             return float(str(value).strip())
         except ValueError as exc:
             raise ValueError(f"{label} must be a decimal number.") from exc
+
+    def responsive_layout(controls, spacing=12):
+        is_mobile = page.width and page.width < 600
+        if is_mobile:
+            return ft.Column(controls, spacing=spacing)
+        else:
+            return ft.Row(controls, spacing=spacing)
 
     def find_user_by_username(username):
         name = (username or "").strip().lower()
@@ -276,6 +285,11 @@ def admin_panel_view(page: ft.Page):
         AuthService.logout()
         await page.push_route("/")
 
+    def toggle_sidebar(_=None):
+        state["sidebar_visible"] = not state["sidebar_visible"]
+        render()
+        page.update()
+
     def sidebar_item(key, label):
         is_active = state["section"] == key
         row_bg = "#0B4D57" if is_active else colors["panel"]
@@ -325,6 +339,7 @@ def admin_panel_view(page: ft.Page):
         if state["section"] == "home":
             return ft.Container(height=0)
         meta = section_meta[state["section"]]
+        is_mobile = page.width and page.width < 600
         breadcrumb = ft.Row(
             [
                 text_link("Home", lambda e: set_section("home")),
@@ -335,22 +350,63 @@ def admin_panel_view(page: ft.Page):
             ],
             spacing=6,
         )
-        return ft.Container(bgcolor=colors["header_dark"], padding=ft.Padding.only(left=24, right=24, top=12, bottom=12), content=breadcrumb)
+        return ft.Container(bgcolor=colors["header_dark"], padding=ft.Padding.only(left=12 if is_mobile else 24, right=12 if is_mobile else 24, top=8 if is_mobile else 12, bottom=8 if is_mobile else 12), content=breadcrumb)
 
     def build_shell(main_content):
         show_sidebar = section_meta[state["section"]]["sidebar"]
-        body = ft.Row(
-            [
-                build_sidebar() if show_sidebar else ft.Container(width=0),
-                ft.Container(
+        is_mobile = page.width and page.width < 600
+
+        if is_mobile:
+            if state["sidebar_visible"] and show_sidebar:
+                body = ft.Column(
+                    [
+                        build_sidebar(),
+                        ft.Container(
+                            expand=True,
+                            padding=12,  # reduced padding for mobile
+                            content=ft.Column([main_content], expand=True, scroll=ft.ScrollMode.AUTO),
+                        ),
+                    ],
                     expand=True,
-                    padding=24,
+                    spacing=0,
+                )
+            else:
+                body = ft.Container(
+                    expand=True,
+                    padding=12,
                     content=ft.Column([main_content], expand=True, scroll=ft.ScrollMode.AUTO),
-                ),
-            ],
-            expand=True,
-            spacing=0,
+                )
+        else:
+            body = ft.Row(
+                [
+                    build_sidebar() if show_sidebar else ft.Container(width=0),
+                    ft.Container(
+                        expand=True,
+                        padding=24,
+                        content=ft.Column([main_content], expand=True, scroll=ft.ScrollMode.AUTO),
+                    ),
+                ],
+                expand=True,
+                spacing=0,
+            )
+
+        header_row = [
+            admin_text("Django administration", size=20 if is_mobile else 24, color="#F2D24A"),  # smaller title on mobile
+        ]
+        if is_mobile and show_sidebar:
+            header_row.insert(0, ft.IconButton(ft.Icons.MENU, on_click=toggle_sidebar, icon_color=colors["text"]))
+        header_row.append(
+            ft.Row(
+                [
+                    nav_button("WELCOME, ADMIN.", lambda e: None),
+                    nav_button("VIEW SITE", lambda e: set_section("home")),
+                    nav_button("CHANGE PASSWORD", lambda e: set_section("home")),
+                    nav_button("LOG OUT", lambda e: page.run_task(logout)),
+                ],
+                spacing=4,
+            )
         )
+
         return ft.Container(
             expand=True,
             bgcolor=colors["bg"],
@@ -358,20 +414,9 @@ def admin_panel_view(page: ft.Page):
                 [
                     ft.Container(
                         bgcolor=colors["header"],
-                        padding=ft.Padding.only(left=18, right=18, top=16, bottom=16),
+                        padding=ft.Padding.only(left=12 if is_mobile else 18, right=12 if is_mobile else 18, top=12 if is_mobile else 16, bottom=12 if is_mobile else 16),  # reduced padding
                         content=ft.Row(
-                            [
-                                admin_text("Django administration", size=24, color="#F2D24A"),
-                                ft.Row(
-                                    [
-                                        nav_button("WELCOME, ADMIN.", lambda e: None),
-                                        nav_button("VIEW SITE", lambda e: set_section("home")),
-                                        nav_button("CHANGE PASSWORD", lambda e: set_section("home")),
-                                        nav_button("LOG OUT", lambda e: page.run_task(logout)),
-                                    ],
-                                    spacing=4,
-                                ),
-                            ],
+                            header_row,
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                     ),
@@ -405,12 +450,14 @@ def admin_panel_view(page: ft.Page):
         )
 
     def stat_box(number, label, detail=""):
+        is_mobile = page.width and page.width < 600
         controls = [admin_text(str(number), size=26, color="#E8EDF2", weight=ft.FontWeight.BOLD), admin_text(label)]
         if detail:
             controls.append(admin_text(detail, size=12, color=colors["muted"]))
-        return panel(ft.Column(controls, spacing=4), width=150, padding=14)
+        return panel(ft.Column(controls, spacing=4), width=150 if not is_mobile else None, padding=14)
 
     def home_page():
+        is_mobile = page.width and page.width < 600
         dashboard = state["dashboard"] or {}
         user_stats = dashboard.get("users", {})
         permit_stats = dashboard.get("permits", {})
@@ -483,36 +530,37 @@ def admin_panel_view(page: ft.Page):
                         for item in actions
                     ],
                     ft.Divider(color=colors["border"]),
-                    ft.Row(
+                    responsive_layout(
                         [
                             stat_box(user_stats.get("total", 0), "Users", f"Admins: {user_stats.get('admins', 0)}"),
                             stat_box(user_stats.get("ngos", 0), "NGOs", f"Donors: {user_stats.get('donors', 0)}"),
                         ],
-                        spacing=12,
                     ),
-                    ft.Row(
+                    responsive_layout(
                         [
                             stat_box(permit_stats.get("pending", 0), "Submitted permits"),
                             stat_box(donation_stats.get("total", 0), "Donations", f"Claimed: {donation_stats.get('claimed', 0)}"),
                         ],
-                        spacing=12,
                     ),
-                    ft.Row(
+                    responsive_layout(
                         [
                             stat_box(claim_stats.get("pending", 0), "Pending claims"),
                             stat_box(dashboard.get("meetings", {}).get("total", 0), "Meetings", f"Active: {dashboard.get('meetings', {}).get('active', 0)}"),
                         ],
-                        spacing=12,
                     ),
                 ],
                 spacing=10,
             ),
-            width=360,
+            width=360 if not is_mobile else None,
         )
-        return ft.Row([ft.Container(expand=True, content=left), right], spacing=28, vertical_alignment=ft.CrossAxisAlignment.START)
+        if is_mobile:
+            return ft.Column([left, right], spacing=18, expand=True)
+        else:
+            return ft.Row([ft.Container(expand=True, content=left), right], spacing=28, vertical_alignment=ft.CrossAxisAlignment.START)
 
     def build_table(headers, rows):
-        return ft.Column(
+        is_mobile = page.width and page.width < 600
+        table_content = ft.Column(
             [
                 ft.Container(
                     bgcolor=colors["panel_alt"],
@@ -523,11 +571,19 @@ def admin_panel_view(page: ft.Page):
             ],
             spacing=0,
         )
+        if is_mobile:
+            return ft.Container(
+                content=table_content,
+                scroll=ft.ScrollMode.AUTO,  # allow horizontal scroll
+            )
+        else:
+            return table_content
 
     def table_cell(label, width, align_right=False, control=None, color=None):
+        is_mobile = page.width and page.width < 600
         content = control or admin_text(label, size=13, color=color)
         alignment = ft.Alignment(1, 0) if align_right else ft.Alignment(-1, 0)
-        return ft.Container(width=width, alignment=alignment, padding=ft.Padding.only(left=10, right=10), content=content)
+        return ft.Container(width=width if not is_mobile else None, alignment=alignment, padding=ft.Padding.only(left=10, right=10), content=content)
 
     def table_row(cells, active=False):
         return ft.Container(
@@ -556,30 +612,45 @@ def admin_panel_view(page: ft.Page):
         return admin_text(text, size=13, color=colors["text"])
 
     def filter_panel(title, sections):
+        is_mobile = page.width and page.width < 600
         controls = [admin_text(title, size=18), ft.Divider(color=colors["border"])]
         for section_title, links in sections:
             controls.append(admin_text(section_title, size=14, weight=ft.FontWeight.BOLD))
             for label, active, handler in links:
                 controls.append(text_link(label, handler, color=colors["link"] if active else colors["muted"]))
             controls.append(ft.Container(height=10))
-        return panel(ft.Column(controls, spacing=6), width=300, padding=16)
+        return panel(ft.Column(controls, spacing=6), width=300 if not is_mobile else None, padding=16)
 
     def field_row(label, control, help_text=""):
-        controls = [
-            ft.Container(width=220, content=admin_text(label, size=15, weight=ft.FontWeight.BOLD)),
-            ft.Container(expand=True, content=control),
-        ]
-        if help_text:
-            controls.append(ft.Container(width=220))
-            controls.append(ft.Container(expand=True, content=admin_text(help_text, size=12, color=colors["muted"])))
-        return ft.Column(
-            [
-                ft.Row(controls[:2], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
-                ft.Container(height=6),
-                ft.Divider(color=colors["border"]),
-            ],
-            spacing=0,
-        )
+        is_mobile = page.width and page.width < 600
+        if is_mobile:
+            controls = [
+                admin_text(label, size=15, weight=ft.FontWeight.BOLD),
+                control,
+            ]
+            if help_text:
+                controls.append(admin_text(help_text, size=12, color=colors["muted"]))
+            return ft.Column(
+                controls + [ft.Container(height=6), ft.Divider(color=colors["border"])],
+                spacing=6,
+                cross_alignment=ft.CrossAxisAlignment.START,
+            )
+        else:
+            controls = [
+                ft.Container(width=220, content=admin_text(label, size=15, weight=ft.FontWeight.BOLD)),
+                ft.Container(expand=True, content=control),
+            ]
+            if help_text:
+                controls.append(ft.Container(width=220))
+                controls.append(ft.Container(expand=True, content=admin_text(help_text, size=12, color=colors["muted"])))
+            return ft.Column(
+                [
+                    ft.Row(controls[:2], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
+                    ft.Container(height=6),
+                    ft.Divider(color=colors["border"]),
+                ],
+                spacing=0,
+            )
 
     def checkbox_with_label(checkbox, label):
         return ft.Row(
@@ -649,13 +720,12 @@ def admin_panel_view(page: ft.Page):
         if action_row.controls:
             content_controls.append(action_row)
         content_controls.append(
-            ft.Row(
+            responsive_layout(
                 [
                     ft.Container(expand=True, content=body),
                     filter_content if filter_content is not None else ft.Container(width=0),
                 ],
-                spacing=24,
-                vertical_alignment=ft.CrossAxisAlignment.START,
+                spacing=18,  # reduced spacing for mobile
             )
         )
         content_controls.append(info_line(count_text))
