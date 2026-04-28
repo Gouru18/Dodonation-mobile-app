@@ -23,6 +23,9 @@ def permits_view(page: ft.Page):
     permit_summary = ft.Text("", color="#4B5563")
     permit_list = ft.Column(spacing=10)
 
+    permit_picker = ft.FilePicker()
+    page.overlay.append(permit_picker)
+
     def display_status(value):
         return PermitService.display_status(value)
 
@@ -146,32 +149,19 @@ def permits_view(page: ft.Page):
         page.update()
 
     async def choose_permit(e):
-        def choose_file():
-            try:
-                import tkinter as tk
-                from tkinter import filedialog
+        selected = await permit_picker.pick_files(
+            dialog_title="Choose NGO permit file",
+            allow_multiple=False,
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=["pdf", "png", "jpg", "jpeg"],
+        )
 
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes("-topmost", True)
-                file_path = filedialog.askopenfilename(
-                    title="Choose NGO permit file",
-                    filetypes=[
-                        ("Documents", "*.pdf *.png *.jpg *.jpeg"),
-                        ("All files", "*.*"),
-                    ],
-                )
-                root.destroy()
-                return file_path
-            except Exception:
-                return None
-
-        file_path = await asyncio.to_thread(choose_file)
-
-        if file_path:
-            permit_path["value"] = file_path
-            permit_file_label.value = os.path.basename(file_path)
+        if selected and selected.files:
+            selected_file = selected.files[0]
+            permit_path["value"] = selected_file.path
+            permit_file_label.value = selected_file.name or os.path.basename(selected_file.path)
         else:
+            permit_path["value"] = None
             permit_file_label.value = "No permit selected"
 
         page.update()

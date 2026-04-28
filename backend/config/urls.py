@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from donations.views import DonationViewSet, ClaimRequestViewSet
 from meetings.views import MeetingViewSet
+from meetings.donor_rating_viewset import DonorRatingViewSet
 from django.http import JsonResponse
 
 # Create a router and register viewsets
@@ -12,6 +13,7 @@ router = DefaultRouter()
 router.register(r'donations', DonationViewSet, basename='donation')
 router.register(r'claims', ClaimRequestViewSet, basename='claim')
 router.register(r'meetings', MeetingViewSet, basename='meeting')
+router.register(r'donor-ratings', DonorRatingViewSet, basename='donor-rating')
 
 def api_root(request):
     return JsonResponse({
@@ -23,6 +25,7 @@ def api_root(request):
             'donations': '/api/donations/',
             'claims': '/api/claims/',
             'meetings': '/api/meetings/',
+            'donor_ratings': '/api/donor-ratings/',
         }
     })
 

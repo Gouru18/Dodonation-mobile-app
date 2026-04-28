@@ -23,6 +23,16 @@ except ImportError:
 
 
 def map_view(page: ft.Page):
+    def route_meeting_id():
+        parts = (page.route or "").strip("/").split("/")
+        if len(parts) == 2 and parts[0] == "map" and parts[1]:
+            return parts[1]
+        return None
+
+    active_meeting_id = route_meeting_id() or AppState.active_meeting_id
+    if active_meeting_id:
+        AppState.active_meeting_id = active_meeting_id
+
     state = {
         "meeting_loaded": False,
         "can_pin_location": False,
@@ -57,12 +67,25 @@ def map_view(page: ft.Page):
     address = auth_input("Meeting Address", ft.Icons.HOME, multiline=True)
     address.min_lines = 2
 
-    lat.read_only = True
-    lon.read_only = True
+    lat.hint_text = "Tap map, search address, or type latitude"
+    lon.hint_text = "Tap map, search address, or type longitude"
 
+    map_error_notice = ft.Container(
+        visible=False,
+        padding=12,
+        border_radius=12,
+        bgcolor="#FFF4E5",
+        border=ft.Border.all(1, "#FEDF89"),
+        content=muted_text(
+            "Map tiles could not load. Check the phone's internet connection, then use the coordinate fields or try again.",
+        ),
+    )
     marker_layer = None
     map_control = None
     current_dialog = None
+
+    def has_coordinates():
+        return bool(normalize_coordinate(lat.value) and normalize_coordinate(lon.value))
 
     def normalize_coordinate(value):
         raw = str(value or "").strip()
@@ -72,6 +95,35 @@ def map_view(page: ft.Page):
             return f"{float(raw):.6f}"
         except (TypeError, ValueError):
             return raw
+
+    def validate_coordinates():
+        try:
+            latitude = float(str(lat.value or "").strip())
+            longitude = float(str(lon.value or "").strip())
+        except (TypeError, ValueError):
+            return None, None, "Latitude and longitude must be valid numbers."
+
+        if latitude < -90 or latitude > 90:
+            return None, None, "Latitude must be between -90 and 90."
+        if longitude < -180 or longitude > 180:
+            return None, None, "Longitude must be between -180 and 180."
+
+        return latitude, longitude, None
+
+    async def update_marker(latitude, longitude, zoom=14):
+        if not marker_layer or not map_control:
+            return
+
+        point = ftm.MapLatitudeLongitude(latitude, longitude)
+        marker_layer.markers = [
+            ftm.Marker(
+                coordinates=point,
+                content=ft.Icon(ft.Icons.LOCATION_ON, color="#B42318"),
+                width=40,
+                height=40,
+            )
+        ]
+        await map_control.center_on(point, zoom=zoom)
 
     def close_dialog():
         nonlocal current_dialog
@@ -109,6 +161,10 @@ def map_view(page: ft.Page):
 
     if ftm:
         marker_layer = ftm.MarkerLayer(markers=[])
+
+        def handle_tile_error(e):
+            map_error_notice.visible = True
+            page.update()
 
         async def reverse_geocode(latitude, longitude):
             try:
@@ -157,23 +213,33 @@ def map_view(page: ft.Page):
             page.update()
 
         map_control = ftm.Map(
-            expand=True,
+            bgcolor="#E5E7EB",
+            keep_alive=True,
             initial_center=ftm.MapLatitudeLongitude(-20.1609, 57.5012),
             initial_zoom=11,
             on_tap=handle_map_tap,
             layers=[
-                ftm.TileLayer(url_template="https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"),
+                ftm.TileLayer(
+                    url_template="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    subdomains=["a", "b", "c"],
+                    user_agent_package_name="com.dodonation.mobile",
+                    fallback_url="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    max_native_zoom=19,
+                    on_image_error=handle_tile_error,
+                ),
                 marker_layer,
             ],
         )
 
     async def load_meeting_context():
-        if not AppState.active_meeting_id:
+        meeting_id = route_meeting_id() or AppState.active_meeting_id
+        if not meeting_id:
             location_text.value = "No active meeting selected."
             page.update()
             return
 
-        response = MeetingService.get_meeting_detail(AppState.active_meeting_id)
+        AppState.active_meeting_id = meeting_id
+        response = MeetingService.get_meeting_detail(meeting_id)
         if response.status_code != 200:
             location_text.value = "Could not load meeting details."
             show_error(page, f"Could not load meeting details: {response.text}")
@@ -221,18 +287,71 @@ def map_view(page: ft.Page):
         save_button.disabled = not state["can_pin_location"] or state["location_saved"]
 
         if marker_layer and map_control and lat.value and lon.value:
-            point = ftm.MapLatitudeLongitude(float(lat.value), float(lon.value))
-            marker_layer.markers = [
-                ftm.Marker(
-                    coordinates=point,
-                    content=ft.Icon(ft.Icons.LOCATION_ON, color="#B42318"),
-                    width=40,
-                    height=40,
-                )
-            ]
-            await map_control.center_on(point, zoom=14)
+            latitude, longitude, coordinate_error = validate_coordinates()
+            if not coordinate_error:
+                await update_marker(latitude, longitude)
 
         page.update()
+
+    async def search_address(e):
+        query = (address.value or "").strip()
+        if not query:
+            show_error(page, "Enter a meeting address to search.")
+            return
+
+        try:
+            response = requests.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": query,
+                    "format": "jsonv2",
+                    "limit": 1,
+                },
+                headers={"User-Agent": "DodonationApp/1.0"},
+                timeout=8,
+            )
+            if response.status_code != 200:
+                show_error(page, "Could not search this address.")
+                return
+
+            results = response.json()
+            if not results:
+                show_error(page, "No location found for that address.")
+                return
+
+            result = results[0]
+            latitude = float(result["lat"])
+            longitude = float(result["lon"])
+            lat.value = f"{latitude:.6f}"
+            lon.value = f"{longitude:.6f}"
+            address.value = result.get("display_name") or query
+            location_text.value = "Location found from the address."
+            await update_marker(latitude, longitude)
+            page.update()
+        except Exception as ex:
+            show_error(page, f"Could not search address: {ex}")
+
+    async def preview_coordinates(e):
+        latitude, longitude, coordinate_error = validate_coordinates()
+        if coordinate_error:
+            show_error(page, coordinate_error)
+            return
+
+        location_text.value = "Coordinates selected."
+        await update_marker(latitude, longitude)
+        page.update()
+
+    def open_external_map(e):
+        if has_coordinates():
+            latitude, longitude, coordinate_error = validate_coordinates()
+            if coordinate_error:
+                show_error(page, coordinate_error)
+                return
+            page.launch_url(f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}")
+            return
+
+        query = (address.value or "Curepipe, Mauritius").strip()
+        page.launch_url(f"https://www.google.com/maps/search/?api=1&query={requests.utils.quote(query)}")
 
     async def get_location(e):
         try:
@@ -247,16 +366,7 @@ def map_view(page: ft.Page):
                 location_text.value = f"Suggested location: {address.value}"
 
                 if marker_layer and map_control and lat.value and lon.value:
-                    point = ftm.MapLatitudeLongitude(float(lat.value), float(lon.value))
-                    marker_layer.markers = [
-                        ftm.Marker(
-                            coordinates=point,
-                            content=ft.Icon(ft.Icons.LOCATION_ON, color="#B42318"),
-                            width=40,
-                            height=40,
-                        )
-                    ]
-                    await map_control.center_on(point, zoom=14)
+                    await update_marker(float(lat.value), float(lon.value))
             else:
                 show_error(page, "Could not fetch current area.")
         except Exception as ex:
@@ -265,7 +375,8 @@ def map_view(page: ft.Page):
         page.update()
 
     def save_location(e):
-        if not AppState.active_meeting_id:
+        meeting_id = route_meeting_id() or AppState.active_meeting_id
+        if not meeting_id:
             show_error(page, "No active meeting selected.")
             return
 
@@ -273,27 +384,32 @@ def map_view(page: ft.Page):
             show_error(page, "This meeting is not ready for location pinning.")
             return
 
-        if not lat.value or not lon.value:
-            show_error(page, "Pick a location on the map first.")
+        latitude, longitude, coordinate_error = validate_coordinates()
+        if coordinate_error:
+            show_error(page, coordinate_error)
             return
+
+        lat.value = f"{latitude:.6f}"
+        lon.value = f"{longitude:.6f}"
 
         show_confirm_notice()
 
     def persist_location():
-        if not AppState.active_meeting_id:
+        meeting_id = route_meeting_id() or AppState.active_meeting_id
+        if not meeting_id:
             show_error(page, "No active meeting selected.")
             return
 
         close_dialog()
         response = MeetingService.set_meeting_location(
-            AppState.active_meeting_id,
+            meeting_id,
             latitude=lat.value,
             longitude=lon.value,
             address=address.value,
         )
 
         if response.status_code == 200:
-            verify_response = MeetingService.get_meeting_detail(AppState.active_meeting_id)
+            verify_response = MeetingService.get_meeting_detail(meeting_id)
             if verify_response.status_code != 200:
                 show_error(page, "Location was submitted, but verification failed when reloading the meeting.")
                 return
@@ -349,11 +465,12 @@ def map_view(page: ft.Page):
         map_section_controls.append(
             ft.Container(
                 content=map_control,
-                height=360,
+                height=320 if (page.width or 430) < 700 else 420,
                 border_radius=18,
                 clip_behavior=ft.ClipBehavior.HARD_EDGE,
             )
         )
+        map_section_controls.append(map_error_notice)
     else:
         map_section_controls.append(
             ft.Container(
@@ -391,6 +508,24 @@ def map_view(page: ft.Page):
                                         get_location,
                                         width=190,
                                         icon=ft.Icons.MY_LOCATION,
+                                    ),
+                                    secondary_button(
+                                        "Find Address",
+                                        search_address,
+                                        width=160,
+                                        icon=ft.Icons.SEARCH,
+                                    ),
+                                    secondary_button(
+                                        "Preview Coordinates",
+                                        preview_coordinates,
+                                        width=200,
+                                        icon=ft.Icons.PLACE,
+                                    ),
+                                    secondary_button(
+                                        "Open Map App",
+                                        open_external_map,
+                                        width=170,
+                                        icon=ft.Icons.MAP,
                                     ),
                                     save_button,
                                 ],

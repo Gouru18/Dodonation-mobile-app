@@ -3,6 +3,7 @@ from django.utils import timezone
 from .models import Meeting
 from donations.models import ClaimRequest
 from donations.serializers import ClaimRequestSerializer
+from .donor_rating_serializer import DonorRatingSerializer
 
 
 class MeetingSerializer(serializers.ModelSerializer):
@@ -18,6 +19,8 @@ class MeetingSerializer(serializers.ModelSerializer):
     is_online_expired = serializers.SerializerMethodField()
     display_status = serializers.SerializerMethodField()
     ngo_notification = serializers.SerializerMethodField()
+    donor_rating = DonorRatingSerializer(read_only=True)
+    can_rate_donor = serializers.SerializerMethodField()
 
     class Meta:
         model = Meeting
@@ -41,6 +44,8 @@ class MeetingSerializer(serializers.ModelSerializer):
             'is_online_expired',
             'display_status',
             'ngo_notification',
+            'donor_rating',
+            'can_rate_donor',
             'created_at',
             'updated_at',
         ]
@@ -89,3 +94,14 @@ class MeetingSerializer(serializers.ModelSerializer):
         if obj.status == 'physical_completed':
             return 'Physical handoff completed.'
         return ''
+
+    def get_can_rate_donor(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return False
+        return (
+            obj.status == 'physical_completed'
+            and obj.claim_request.receiver_id == user.id
+            and not hasattr(obj, 'donor_rating')
+        )

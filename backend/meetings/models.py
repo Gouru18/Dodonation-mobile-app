@@ -33,3 +33,18 @@ class Meeting(models.Model):
     def __str__(self):
         donation_title = self.claim_request.donation.title
         return f"{donation_title} meeting on {self.scheduled_time:%Y-%m-%d %H:%M}"
+
+
+class DonorRating(models.Model):
+    meeting = models.OneToOneField(Meeting, on_delete=models.CASCADE, related_name='donor_rating')
+    ngo = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_ratings')
+    donor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_ratings')
+    rating = models.PositiveSmallIntegerField()
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Rating {self.rating} for {self.donor} by {self.ngo} (Meeting {self.meeting_id})"

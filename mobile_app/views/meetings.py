@@ -101,16 +101,33 @@ def _format_picker_time(value):
     return parsed_time.strftime("%H:%M")
 
 
+def _date_picker_datetime(value):
+    return datetime.combine(value, time(hour=12))
+
+
 def _parse_picker_date(value):
     if isinstance(value, datetime):
-        return value
+        if value.tzinfo is not None:
+            value = value.astimezone()
+        return datetime.combine(value.date(), time(hour=12))
 
     raw = str(value or "").strip()
     if not raw:
         return None
 
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+
     try:
-        return datetime.strptime(raw, "%Y-%m-%d")
+        parsed = datetime.fromisoformat(raw)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone()
+        return datetime.combine(parsed.date(), time(hour=12))
+    except ValueError:
+        pass
+
+    try:
+        return _date_picker_datetime(datetime.strptime(raw[:10], "%Y-%m-%d").date())
     except ValueError:
         return None
 
@@ -204,9 +221,9 @@ def meetings_view(page: ft.Page):
 
     date_picker = ft.DatePicker(
         modal=True,
-        value=datetime.now(),
-        first_date=datetime.combine(date.today(), time.min),
-        last_date=datetime(date.today().year + 5, 12, 31),
+        value=_date_picker_datetime(date.today()),
+        first_date=_date_picker_datetime(date.today()),
+        last_date=_date_picker_datetime(date(date.today().year + 5, 12, 31)),
         help_text="Select meeting date",
         confirm_text="Choose",
         cancel_text="Cancel",
@@ -238,7 +255,7 @@ def meetings_view(page: ft.Page):
 
     def open_date_picker(e):
         selected_date = _parse_picker_date(meeting_date.value)
-        date_picker.value = selected_date or datetime.combine(date.today(), time.min)
+        date_picker.value = selected_date or _date_picker_datetime(date.today())
         page.show_dialog(date_picker)
 
     def open_dialog(title, content_controls, actions, modal=True):
@@ -318,6 +335,78 @@ def meetings_view(page: ft.Page):
     def schedule_button_text():
         return "Reschedule Meeting" if reschedule_state["meeting_id"] else "Schedule Meeting"
 
+    def append_rating_summary(controls, donor_rating, viewer_is_donor):
+        if not donor_rating:
+            return
+
+        rating_value = donor_rating.get("rating")
+        comment = donor_rating.get("comment")
+        if viewer_is_donor:
+            ngo_details = donor_rating.get("ngo_details") or {}
+            rater_name = (
+                ngo_details.get("organization_name")
+                or ngo_details.get("username")
+                or ngo_details.get("email")
+                or "the NGO"
+            )
+            controls.append(muted_text(f"{rater_name} rated you: {rating_value}/5."))
+        else:
+            controls.append(muted_text(f"You rated this donor {rating_value}/5."))
+
+        if comment:
+            controls.append(muted_text(f"Comment: {comment}"))
+
+    def show_rating_dialog(meeting):
+        rating_dropdown = ft.Dropdown(
+            label="Rating",
+            value="5",
+            options=[
+                ft.dropdown.Option(str(value), f"{value} star{'s' if value != 1 else ''}")
+                for value in range(1, 6)
+            ],
+            border_radius=14,
+            filled=True,
+            bgcolor="white",
+        )
+        comment_field = auth_input("Comment (optional)", ft.Icons.RATE_REVIEW, multiline=True)
+        comment_field.min_lines = 3
+
+        open_dialog(
+            "Rate Donor",
+            [
+                muted_text("How was your physical handoff experience with this donor?"),
+                rating_dropdown,
+                comment_field,
+            ],
+            [
+                ft.TextButton("Cancel", on_click=lambda e: close_dialog()),
+                ft.TextButton(
+                    "Submit Rating",
+                    on_click=lambda e: submit_donor_rating(
+                        meeting.get("id"),
+                        rating_dropdown.value,
+                        comment_field.value,
+                    ),
+                ),
+            ],
+        )
+
+    def submit_donor_rating(meeting_id, rating_value, comment):
+        close_dialog()
+
+        try:
+            rating = int(rating_value)
+        except (TypeError, ValueError):
+            show_error(page, "Choose a rating between 1 and 5.")
+            return
+
+        response = MeetingService.rate_donor(meeting_id, rating, comment or "")
+        if response.status_code == 201:
+            show_success(page, "Thanks, your donor rating was submitted.")
+            load_meetings()
+        else:
+            show_error(page, f"Could not submit donor rating: {response.text}")
+
     def begin_reschedule(meeting):
         claim = meeting.get("claim_request_data") or {}
         reschedule_state["meeting_id"] = meeting.get("id")
@@ -359,6 +448,43 @@ def meetings_view(page: ft.Page):
         is_expired = bool(meeting.get("is_online_expired"))
         has_joinable_link = bool(meeting.get("meeting_link")) and not is_expired
 
+        # Prepare meeting time display
+        scheduled_time_str = meeting.get('scheduled_time', 'Not set')
+        # Try to parse the scheduled_time for countdown
+        countdown_text = ""
+        try:
+            if scheduled_time_str and scheduled_time_str != 'Not set':
+                # Accepts ISO or 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DD HH:MM:SS'
+                dt = None
+                for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"):
+                    try:
+                        dt = datetime.strptime(scheduled_time_str[:16], fmt)
+                        break
+                    except Exception:
+                        continue
+                if not dt:
+                    try:
+                        dt = datetime.fromisoformat(scheduled_time_str[:16])
+                    except Exception:
+                        pass
+                if dt:
+                    now = datetime.now()
+                    diff = dt - now
+                    if diff.total_seconds() > 0:
+                        mins = int(diff.total_seconds() // 60)
+                        hours = mins // 60
+                        days = hours // 24
+                        if days > 0:
+                            countdown_text = f"Meeting starts in {days}d {hours%24}h {mins%60}m"
+                        elif hours > 0:
+                            countdown_text = f"Meeting starts in {hours}h {mins%60}m"
+                        else:
+                            countdown_text = f"Meeting starts in {mins} min"
+                    else:
+                        countdown_text = "Meeting time has passed"
+        except Exception:
+            countdown_text = ""
+
         controls = [
             ft.Row(
                 [
@@ -375,9 +501,12 @@ def meetings_view(page: ft.Page):
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
-            muted_text(f"When: {meeting.get('scheduled_time', 'Not set')}"),
-            muted_text(f"Google Meet: {link_value}"),
+            muted_text(f"Meeting at: {scheduled_time_str}"),
         ]
+        # Only show countdown if meeting is not completed
+        if countdown_text and status_value not in {"online_completed", "location_pinned", "physical_completed", "expired", "cancelled"}:
+            controls.append(muted_text(countdown_text))
+        controls.append(muted_text(f"Google Meet: {link_value}"))
 
         if has_joinable_link and status_value in {"online_scheduled", "online_completed"}:
             controls.append(
@@ -442,6 +571,11 @@ def meetings_view(page: ft.Page):
                 controls.append(
                     ft.Text("Donation handoff completed.", color="green")
                 )
+                append_rating_summary(
+                    controls,
+                    meeting.get("donor_rating"),
+                    viewer_is_donor=True,
+                )
 
         else:
             if status_value == "expired":
@@ -461,6 +595,22 @@ def meetings_view(page: ft.Page):
                 controls.append(ft.Text("Meeting location is ready. Proceed to handoff.", color="blue"))
             elif status_value == "physical_completed":
                 controls.append(ft.Text("Donation handoff completed.", color="green"))
+                donor_rating = meeting.get("donor_rating")
+                if donor_rating:
+                    append_rating_summary(
+                        controls,
+                        donor_rating,
+                        viewer_is_donor=False,
+                    )
+                elif meeting.get("can_rate_donor"):
+                    controls.append(
+                        primary_button(
+                            "Rate Donor",
+                            lambda e, current_meeting=meeting: show_rating_dialog(current_meeting),
+                            width=180,
+                            icon=ft.Icons.STAR_RATE,
+                        )
+                    )
 
         return ft.Container(
             content=ft.Column(controls, spacing=8),
@@ -595,7 +745,7 @@ def meetings_view(page: ft.Page):
 
     async def open_map(meeting_id):
         AppState.active_meeting_id = meeting_id
-        await page.push_route("/map")
+        await page.push_route(f"/map/{meeting_id}")
 
     async def go_back(e):
         await page.push_route("/dashboard")

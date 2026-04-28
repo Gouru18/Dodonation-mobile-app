@@ -92,7 +92,7 @@ def main(page: ft.Page):
             return permits_view(page)
         if route == "/meetings":
             return meetings_view(page)
-        if route == "/map":
+        if route == "/map" or route.startswith("/map/"):
             return map_view(page)
         if route == "/admin-panel":
             return admin_panel_view(page)

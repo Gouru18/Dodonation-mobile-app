@@ -74,3 +74,16 @@ class MeetingService:
             headers=AuthService.auth_headers(),
             timeout=10
         )
+
+    @staticmethod
+    def rate_donor(meeting_id, rating, comment=""):
+        return requests.post(
+            f"{BASE_URL}/donor-ratings/",
+            json={
+                "meeting": meeting_id,
+                "rating": rating,
+                "comment": comment,
+            },
+            headers=AuthService.auth_headers(),
+            timeout=10
+        )
