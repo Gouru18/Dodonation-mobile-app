@@ -38,16 +38,20 @@ online_scheduled
 → online_completed 
 → location_pinned (using flet map)
 → physical_completed
+→ NGO provides ratings about donor
+
 Actions:
 Complete Online Meeting
 Pin Physical Location
 Complete Physical Meeting
+Submit rating
 
 Each step is only enabled when the previous one is completed.
 
 Meeting Flow:
 Step 1: Schedule Meeting
 Donor provides Google Meet link
+A small counter indicating number of minutes remaining before online meeting (it disappears after online meeting is completed)
 Step 2: Complete Online Meeting
 
 Changes status:
@@ -64,4 +68,4 @@ Final confirmation
 The ngo can upload proof of receiving the donations after physical meeting (upload by using phone camera/ upload if running the app on a PC)
 
 Status:
-location_pinned → physical_completed
+location_pinned → physical_completed → NGO leaves a rating about the donor
