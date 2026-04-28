@@ -15,8 +15,10 @@ Donor:
 NGO:
 - Register and submit permit for approval
 - Access app only after admin validation
+- Get an email after their account has been activated
 - Claim donations
 - Coordinate meetings with donors
+- leave a rating
 Admin:
 - Approve ngo permits and activate their accounts
 - can activate, suspend or delete any accounts
