@@ -18,6 +18,11 @@ try:
 except ImportError:  # pragma: no cover - fallback when dependency is not installed yet
     load_dotenv = None
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+if load_dotenv:
+    load_dotenv(BASE_DIR / ".env")
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -48,7 +53,7 @@ SECRET_KEY = 'django-insecure-v=817h+1&2j!1k17l+axh2k3q^9#yx1b=wp#gd*xtbou((ij6o
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["192.168.100.18", "127.0.0.1", "localhost"]
+ALLOWED_HOSTS = ["*"]
 
 AUTH_USER_MODEL = 'accounts.User'
 
