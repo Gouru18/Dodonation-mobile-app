@@ -35,13 +35,14 @@ class DonationSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'date_created', 
             'donor', 'donor_username', 'image'
         ]
+
 class ClaimRequestSerializer(serializers.ModelSerializer):
     donation_title = serializers.CharField(source='donation.title', read_only=True)
     receiver_name = serializers.CharField(source='receiver.user.username', read_only=True)
 
     class Meta:
         model = ClaimRequest
-        fields = ['id', 'donation_title', 'receiver_name', 'status', 'date_requested']
+        fields = ['id', 'donation', 'donation_title', 'receiver', 'receiver_name', 'status', 'date_requested']
 
 class GeneralReviewSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
