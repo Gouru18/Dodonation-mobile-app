@@ -23,9 +23,6 @@ def permits_view(page: ft.Page):
     permit_summary = ft.Text("", color="#4B5563")
     permit_list = ft.Column(spacing=10)
 
-    permit_picker = ft.FilePicker()
-    page.overlay.append(permit_picker)
-
     def display_status(value):
         return PermitService.display_status(value)
 
@@ -149,12 +146,19 @@ def permits_view(page: ft.Page):
         page.update()
 
     async def choose_permit(e):
-        selected = await permit_picker.pick_files(
-            dialog_title="Choose NGO permit file",
-            allow_multiple=False,
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["pdf", "png", "jpg", "jpeg"],
-        )
+        picker = ft.FilePicker()
+        try:
+            selected = await picker.pick_files(
+                dialog_title="Choose NGO permit file",
+                allow_multiple=False,
+                file_type=ft.FilePickerFileType.CUSTOM,
+                allowed_extensions=["pdf", "png", "jpg", "jpeg"],
+                with_data=False,
+            )
+        except RuntimeError as ex:
+            show_error(page, f"Could not open file picker: {ex}")
+            page.update()
+            return
 
         if selected and selected.files:
             selected_file = selected.files[0]

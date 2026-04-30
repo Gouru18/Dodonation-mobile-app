@@ -1,3 +1,4 @@
+import platform
 import requests
 import flet as ft
 
@@ -38,11 +39,13 @@ def map_view(page: ft.Page):
     if active_meeting_id:
         AppState.active_meeting_id = active_meeting_id
 
+    is_windows = platform.system().lower().startswith("win")
+
     state = {
         "meeting_loaded": False,
         "can_pin_location": False,
         "location_saved": False,
-        "location_permission_granted": ftg is None,
+        "location_permission_granted": ftg is None and not is_windows,
     }
 
     location_text = ft.Text(
@@ -76,6 +79,13 @@ def map_view(page: ft.Page):
     lat.hint_text = "Tap map, search address, or type latitude"
     lon.hint_text = "Tap map, search address, or type longitude"
 
+    marker_layer = None
+    map_control = None
+    map_permission_gate = None
+    current_dialog = None
+    url_launcher = ft.UrlLauncher()
+    geolocator = None
+
     map_error_notice = ft.Container(
         visible=False,
         padding=12,
@@ -87,22 +97,16 @@ def map_view(page: ft.Page):
         ),
     )
     location_permission_notice = ft.Container(
-        visible=ftg is None,
+        visible=bool((geolocator or is_windows) and not state["location_permission_granted"]),
         padding=12,
         border_radius=12,
         bgcolor="#EFF6FF",
         border=ft.Border.all(1, "#BFDBFE"),
         content=muted_text(
-            "Native location permission prompts require the optional 'flet-geolocator' package. "
-            "Manual map picking and address search still work.",
+            "Please allow location access so the app can use your device location for the meeting map. "
+            "Click Allow when prompted.",
         ),
     )
-    marker_layer = None
-    map_control = None
-    map_permission_gate = None
-    current_dialog = None
-    url_launcher = ft.UrlLauncher()
-    geolocator = None
 
     if ftg:
         geolocator = ftg.Geolocator(
@@ -182,7 +186,7 @@ def map_view(page: ft.Page):
     def update_location_permission_ui():
         if map_permission_gate:
             map_permission_gate.visible = bool(geolocator and not state["location_permission_granted"])
-        location_permission_notice.visible = bool(geolocator and not state["location_permission_granted"])
+        location_permission_notice.visible = bool((geolocator or is_windows) and not state["location_permission_granted"])
 
     async def open_app_settings(e):
         if geolocator:
@@ -236,7 +240,7 @@ def map_view(page: ft.Page):
 
     async def refresh_location_permission_status():
         if not geolocator:
-            state["location_permission_granted"] = True
+            state["location_permission_granted"] = not is_windows
             update_location_permission_ui()
             page.update()
             return
@@ -250,6 +254,29 @@ def map_view(page: ft.Page):
             state["location_permission_granted"] = False
             update_location_permission_ui()
             page.update()
+
+    async def allow_windows_location(e):
+        close_dialog()
+        state["location_permission_granted"] = True
+        update_location_permission_ui()
+        location_text.value = "Location access allowed. Fetching your current location..."
+        page.update()
+        await perform_get_location()
+
+    async def prompt_windows_location_permission(e=None):
+        open_dialog(
+            "Allow Location Access",
+            [
+                muted_text(
+                    "To use current location on Windows, please allow the app to access your location. "
+                    "Click Allow to continue."
+                )
+            ],
+            [
+                ft.TextButton("Cancel", on_click=lambda e: close_dialog()),
+                ft.TextButton("Allow", on_click=allow_windows_location),
+            ],
+        )
 
     async def request_map_permission(e):
         if await ensure_location_permission("open the map"):
@@ -451,41 +478,7 @@ def map_view(page: ft.Page):
         except Exception as ex:
             show_error(page, f"Could not search address: {ex}")
 
-    async def preview_coordinates(e):
-        if not await ensure_location_permission("preview coordinates on the map"):
-            return
-
-        latitude, longitude, coordinate_error = validate_coordinates()
-        if coordinate_error:
-            show_error(page, coordinate_error)
-            return
-
-        location_text.value = "Coordinates selected."
-        await update_marker(latitude, longitude)
-        page.update()
-
-    async def open_external_map(e):
-        if has_coordinates():
-            latitude, longitude, coordinate_error = validate_coordinates()
-            if coordinate_error:
-                show_error(page, coordinate_error)
-                return
-            await url_launcher.launch_url(
-                f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}",
-                mode=ft.LaunchMode.EXTERNAL_APPLICATION,
-            )
-            return
-
-        query = (address.value or "Curepipe, Mauritius").strip()
-        await url_launcher.launch_url(
-            f"https://www.google.com/maps/search/?api=1&query={requests.utils.quote(query)}",
-            mode=ft.LaunchMode.EXTERNAL_APPLICATION,
-        )
-
-    async def get_location(e):
-        if not await ensure_location_permission("use your current location"):
-            return
-
+    async def perform_get_location():
         try:
             if geolocator:
                 service_enabled = await geolocator.is_location_service_enabled()
@@ -523,6 +516,19 @@ def map_view(page: ft.Page):
             show_error(page, f"Error: {ex}")
 
         page.update()
+
+    async def get_location(e):
+        if geolocator:
+            if not await ensure_location_permission("use your current location"):
+                return
+            await perform_get_location()
+            return
+
+        if is_windows and not state["location_permission_granted"]:
+            await prompt_windows_location_permission()
+            return
+
+        await perform_get_location()
 
     def save_location(e):
         meeting_id = route_meeting_id() or AppState.active_meeting_id
@@ -632,7 +638,7 @@ def map_view(page: ft.Page):
                         color="#1F2937",
                     ),
                     muted_text(
-                        "Allow location access before using the meeting map.",
+                        "Please allow location access so the app can use your device location for the meeting map.",
                         text_align=ft.TextAlign.CENTER,
                     ),
                     primary_button(
@@ -707,18 +713,6 @@ def map_view(page: ft.Page):
                                         search_address,
                                         width=160,
                                         icon=ft.Icons.SEARCH,
-                                    ),
-                                    secondary_button(
-                                        "Preview Coordinates",
-                                        preview_coordinates,
-                                        width=200,
-                                        icon=ft.Icons.PLACE,
-                                    ),
-                                    secondary_button(
-                                        "Open Map App",
-                                        open_external_map,
-                                        width=170,
-                                        icon=ft.Icons.MAP,
                                     ),
                                     save_button,
                                 ],
