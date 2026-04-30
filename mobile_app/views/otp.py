@@ -19,7 +19,6 @@ from utils.helpers import (
 def otp_view(page: ft.Page):
     email = auth_input("Email", ft.Icons.EMAIL)
     email.value = AppState.pending_otp_email or ""
-    email.read_only = True
 
     otp_code = auth_input("OTP Code", ft.Icons.PIN)
 
@@ -47,7 +46,10 @@ def otp_view(page: ft.Page):
 
     async def verify_otp(e):
         try:
-            if not email.value or not otp_code.value:
+            if not email.value:
+                show_error(page, "Please enter your email address")
+                return
+            if not otp_code.value:
                 show_error(page, "Please enter the OTP code")
                 return
 

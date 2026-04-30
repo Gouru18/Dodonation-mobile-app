@@ -268,8 +268,8 @@ class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email')
-        otp_code = request.data.get('otp')
+        email = (request.data.get('email') or '').strip()
+        otp_code = str(request.data.get('otp') or '').strip()
 
         if not email or not otp_code:
             return Response(
