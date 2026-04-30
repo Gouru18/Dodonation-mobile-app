@@ -268,7 +268,7 @@ def map_view(page: ft.Page):
             "Allow Location Access",
             [
                 muted_text(
-                    "To use current location on Windows, please allow the app to access your location. "
+                    "To use current location, please allow the app to access your location. "
                     "Click Allow to continue."
                 )
             ],
