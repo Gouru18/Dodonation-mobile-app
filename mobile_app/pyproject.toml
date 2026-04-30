@@ -1,0 +1,6 @@
+[tool.flet.android.permission]
+"android.permission.ACCESS_FINE_LOCATION" = true
+"android.permission.ACCESS_COARSE_LOCATION" = true
+
+[tool.flet.ios.info]
+NSLocationWhenInUseUsageDescription = "Dodonation uses your location only when you choose to pin or use a meeting handoff point."

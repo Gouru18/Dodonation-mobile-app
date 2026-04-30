@@ -41,7 +41,6 @@ online_scheduled
 → location_pinned (using flet map)
 → physical_completed
 → NGO provides ratings about donor
-
 Actions:
 Complete Online Meeting
 Pin Physical Location

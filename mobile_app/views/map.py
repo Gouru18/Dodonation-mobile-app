@@ -21,6 +21,11 @@ try:
 except ImportError:
     ftm = None
 
+try:
+    import flet_geolocator as ftg
+except ImportError:
+    ftg = None
+
 
 def map_view(page: ft.Page):
     def route_meeting_id():
@@ -37,6 +42,7 @@ def map_view(page: ft.Page):
         "meeting_loaded": False,
         "can_pin_location": False,
         "location_saved": False,
+        "location_permission_granted": ftg is None,
     }
 
     location_text = ft.Text(
@@ -80,9 +86,30 @@ def map_view(page: ft.Page):
             "Map tiles could not load. Check the phone's internet connection, then use the coordinate fields or try again.",
         ),
     )
+    location_permission_notice = ft.Container(
+        visible=ftg is None,
+        padding=12,
+        border_radius=12,
+        bgcolor="#EFF6FF",
+        border=ft.Border.all(1, "#BFDBFE"),
+        content=muted_text(
+            "Native location permission prompts require the optional 'flet-geolocator' package. "
+            "Manual map picking and address search still work.",
+        ),
+    )
     marker_layer = None
     map_control = None
+    map_permission_gate = None
     current_dialog = None
+    url_launcher = ft.UrlLauncher()
+    geolocator = None
+
+    if ftg:
+        geolocator = ftg.Geolocator(
+            configuration=ftg.GeolocatorConfiguration(
+                accuracy=ftg.GeolocatorPositionAccuracy.LOW,
+            ),
+        )
 
     def has_coordinates():
         return bool(normalize_coordinate(lat.value) and normalize_coordinate(lon.value))
@@ -144,6 +171,91 @@ def map_view(page: ft.Page):
         current_dialog = dialog
         page.show_dialog(dialog)
 
+    def permission_is_granted(status):
+        if not ftg or status is None:
+            return False
+        return status in (
+            ftg.GeolocatorPermissionStatus.ALWAYS,
+            ftg.GeolocatorPermissionStatus.WHILE_IN_USE,
+        )
+
+    def update_location_permission_ui():
+        if map_permission_gate:
+            map_permission_gate.visible = bool(geolocator and not state["location_permission_granted"])
+        location_permission_notice.visible = bool(geolocator and not state["location_permission_granted"])
+
+    async def open_app_settings(e):
+        if geolocator:
+            close_dialog()
+            try:
+                await geolocator.open_app_settings()
+            except Exception as ex:
+                show_error(page, f"Could not open app settings: {ex}")
+
+    async def ensure_location_permission(action_label="use location features"):
+        if not geolocator:
+            return True
+
+        try:
+            status = await geolocator.get_permission_status()
+            if permission_is_granted(status):
+                state["location_permission_granted"] = True
+                update_location_permission_ui()
+                page.update()
+                return True
+
+            status = await geolocator.request_permission()
+            if permission_is_granted(status):
+                state["location_permission_granted"] = True
+                update_location_permission_ui()
+                page.update()
+                return True
+
+            state["location_permission_granted"] = False
+            update_location_permission_ui()
+            if status == ftg.GeolocatorPermissionStatus.DENIED_FOREVER:
+                open_dialog(
+                    "Location Permission Needed",
+                    [
+                        muted_text(
+                            "Location access is blocked for this app. Enable it in app settings to use map location features."
+                        ),
+                    ],
+                    [
+                        ft.TextButton("Cancel", on_click=lambda e: close_dialog()),
+                        ft.TextButton("Open Settings", on_click=open_app_settings),
+                    ],
+                )
+            else:
+                show_error(page, f"Location permission is required to {action_label}.")
+            page.update()
+            return False
+        except Exception as ex:
+            show_error(page, f"Could not request location permission: {ex}")
+            return False
+
+    async def refresh_location_permission_status():
+        if not geolocator:
+            state["location_permission_granted"] = True
+            update_location_permission_ui()
+            page.update()
+            return
+
+        try:
+            status = await geolocator.get_permission_status()
+            state["location_permission_granted"] = permission_is_granted(status)
+            update_location_permission_ui()
+            page.update()
+        except Exception:
+            state["location_permission_granted"] = False
+            update_location_permission_ui()
+            page.update()
+
+    async def request_map_permission(e):
+        if await ensure_location_permission("open the map"):
+            location_text.value = "Location permission granted. You can now use the map."
+            page.update()
+
     def show_confirm_notice():
         open_dialog(
             "Save Meeting Location",
@@ -159,6 +271,32 @@ def map_view(page: ft.Page):
             ],
         )
 
+    async def reverse_geocode(latitude, longitude):
+        try:
+            response = requests.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={
+                    "lat": latitude,
+                    "lon": longitude,
+                    "format": "jsonv2",
+                },
+                headers={"User-Agent": "DodonationApp/1.0"},
+                timeout=8,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                display_name = data.get("display_name")
+                if display_name:
+                    address.value = display_name
+                    location_text.value = "Location selected and address resolved."
+                    page.update()
+                    return
+        except Exception:
+            pass
+
+        location_text.value = "Location selected from the map. Address could not be resolved."
+        page.update()
+
     if ftm:
         marker_layer = ftm.MarkerLayer(markers=[])
 
@@ -166,35 +304,14 @@ def map_view(page: ft.Page):
             map_error_notice.visible = True
             page.update()
 
-        async def reverse_geocode(latitude, longitude):
-            try:
-                response = requests.get(
-                    "https://nominatim.openstreetmap.org/reverse",
-                    params={
-                        "lat": latitude,
-                        "lon": longitude,
-                        "format": "jsonv2",
-                    },
-                    headers={"User-Agent": "DodonationApp/1.0"},
-                    timeout=8,
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    display_name = data.get("display_name")
-                    if display_name:
-                        address.value = display_name
-                        location_text.value = "Location selected and address resolved."
-                        page.update()
-                        return
-            except Exception:
-                pass
-
-            location_text.value = "Location selected from the map. Address could not be resolved."
-            page.update()
-
-        def handle_map_tap(e):
+        async def handle_map_tap(e):
             if not state["can_pin_location"]:
                 show_error(page, "This meeting is not ready for location pinning yet.")
+                return
+            if not state["location_permission_granted"]:
+                show_error(page, "Allow location permission before using the map.")
+                return
+            if not await ensure_location_permission("pin a meeting point on the map"):
                 return
 
             coordinates = e.coordinates
@@ -294,6 +411,9 @@ def map_view(page: ft.Page):
         page.update()
 
     async def search_address(e):
+        if not await ensure_location_permission("search and preview locations on the map"):
+            return
+
         query = (address.value or "").strip()
         if not query:
             show_error(page, "Enter a meeting address to search.")
@@ -332,6 +452,9 @@ def map_view(page: ft.Page):
             show_error(page, f"Could not search address: {ex}")
 
     async def preview_coordinates(e):
+        if not await ensure_location_permission("preview coordinates on the map"):
+            return
+
         latitude, longitude, coordinate_error = validate_coordinates()
         if coordinate_error:
             show_error(page, coordinate_error)
@@ -341,34 +464,61 @@ def map_view(page: ft.Page):
         await update_marker(latitude, longitude)
         page.update()
 
-    def open_external_map(e):
+    async def open_external_map(e):
         if has_coordinates():
             latitude, longitude, coordinate_error = validate_coordinates()
             if coordinate_error:
                 show_error(page, coordinate_error)
                 return
-            page.launch_url(f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}")
+            await url_launcher.launch_url(
+                f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}",
+                mode=ft.LaunchMode.EXTERNAL_APPLICATION,
+            )
             return
 
         query = (address.value or "Curepipe, Mauritius").strip()
-        page.launch_url(f"https://www.google.com/maps/search/?api=1&query={requests.utils.quote(query)}")
+        await url_launcher.launch_url(
+            f"https://www.google.com/maps/search/?api=1&query={requests.utils.quote(query)}",
+            mode=ft.LaunchMode.EXTERNAL_APPLICATION,
+        )
 
     async def get_location(e):
-        try:
-            response = requests.get("http://ip-api.com/json/", timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                lat.value = str(data.get("lat", ""))
-                lon.value = str(data.get("lon", ""))
-                address.value = ", ".join(
-                    [part for part in [data.get("city"), data.get("regionName"), data.get("country")] if part]
-                )
-                location_text.value = f"Suggested location: {address.value}"
+        if not await ensure_location_permission("use your current location"):
+            return
 
-                if marker_layer and map_control and lat.value and lon.value:
-                    await update_marker(float(lat.value), float(lon.value))
-            else:
+        try:
+            if geolocator:
+                service_enabled = await geolocator.is_location_service_enabled()
+                if not service_enabled:
+                    show_error(page, "Turn on location services to use your current location.")
+                    return
+
+                position = await geolocator.get_current_position()
+                lat.value = f"{position.latitude:.6f}"
+                lon.value = f"{position.longitude:.6f}"
+                location_text.value = "Current location selected."
+
+                if marker_layer and map_control:
+                    await update_marker(position.latitude, position.longitude)
+                await reverse_geocode(position.latitude, position.longitude)
+                page.update()
+                return
+
+            response = requests.get("http://ip-api.com/json/", timeout=5)
+            if response.status_code != 200:
                 show_error(page, "Could not fetch current area.")
+                return
+
+            data = response.json()
+            lat.value = str(data.get("lat", ""))
+            lon.value = str(data.get("lon", ""))
+            address.value = ", ".join(
+                [part for part in [data.get("city"), data.get("regionName"), data.get("country")] if part]
+            )
+            location_text.value = f"Suggested location: {address.value}"
+
+            if marker_layer and map_control and lat.value and lon.value:
+                await update_marker(float(lat.value), float(lon.value))
         except Exception as ex:
             show_error(page, f"Error: {ex}")
 
@@ -459,17 +609,59 @@ def map_view(page: ft.Page):
     save_button.disabled = True
 
     page.run_task(load_meeting_context)
+    page.run_task(refresh_location_permission_status)
+    view_services = [url_launcher]
+    if geolocator:
+        view_services.append(geolocator)
 
     map_section_controls = []
     if map_control:
+        map_permission_gate = ft.Container(
+            visible=bool(geolocator and not state["location_permission_granted"]),
+            expand=True,
+            alignment=ft.Alignment.CENTER,
+            bgcolor="#F8FAFCCC",
+            padding=24,
+            content=ft.Column(
+                [
+                    ft.Icon(ft.Icons.LOCATION_ON, size=42, color="#166534"),
+                    ft.Text(
+                        "Location Permission Required",
+                        size=18,
+                        weight=ft.FontWeight.BOLD,
+                        color="#1F2937",
+                    ),
+                    muted_text(
+                        "Allow location access before using the meeting map.",
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    primary_button(
+                        "Allow Location Access",
+                        request_map_permission,
+                        width=220,
+                        icon=ft.Icons.MY_LOCATION,
+                    ),
+                ],
+                spacing=12,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+        )
         map_section_controls.append(
             ft.Container(
-                content=map_control,
+                content=ft.Stack(
+                    [
+                        map_control,
+                        map_permission_gate,
+                    ],
+                    expand=True,
+                ),
                 height=320 if (page.width or 430) < 700 else 420,
                 border_radius=18,
                 clip_behavior=ft.ClipBehavior.HARD_EDGE,
             )
         )
+        map_section_controls.append(location_permission_notice)
         map_section_controls.append(map_error_notice)
     else:
         map_section_controls.append(
@@ -488,6 +680,7 @@ def map_view(page: ft.Page):
     return ft.View(
         route="/map",
         appbar=build_appbar("Meeting Map", go_back),
+        services=view_services,
         controls=[
             page_container(
                 centered_content(
