@@ -8,6 +8,7 @@ from accounts.models import User, OTPCode
 from donations.models import Donation, ClaimRequest
 from meetings.models import Meeting
 from profiles.models import DonorProfile, NGOProfile, NGOPermitApplication
+from core.email_utils import send_ngo_status_email
 
 from .serializers import (
     AdminClaimRequestSerializer,
@@ -158,6 +159,11 @@ class AdminNGOPermitViewSet(AdminOnlyMixin, viewsets.ModelViewSet):
         permit.save()
         permit.ngo.user.is_active = True
         permit.ngo.user.save(update_fields=['is_active'])
+        send_ngo_status_email(
+            permit.ngo.user.email,
+            'approved',
+            permit.ngo.organization_name,
+        )
         return Response(self.get_serializer(permit).data)
 
     @action(detail=True, methods=['post'])
@@ -168,6 +174,12 @@ class AdminNGOPermitViewSet(AdminOnlyMixin, viewsets.ModelViewSet):
         permit.reviewed_at = timezone.now()
         permit.rejection_reason = request.data.get('rejection_reason', '')
         permit.save()
+        send_ngo_status_email(
+            permit.ngo.user.email,
+            'rejected',
+            permit.ngo.organization_name,
+            permit.rejection_reason,
+        )
         return Response(self.get_serializer(permit).data)
 
 

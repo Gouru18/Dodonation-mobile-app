@@ -988,7 +988,7 @@ def donations_view(page: ft.Page):
 
     feed_title = "All Donation Posts" if is_donor else "Available Donations"
     feed_subtitle = (
-        "Browse all donation posts and track their status: available, pending, claimed, or rejected."
+        "Browse all donation posts and track their status: available or pending."
         if is_donor
         else "Browse active donations and send a claim request."
     )

@@ -61,6 +61,8 @@ def send_otp_email(email, otp_code):
 
 def send_ngo_status_email(email, status, organization_name=None, rejection_reason=None):
     """Send NGO status update email to an NGO."""
+    _ensure_email_settings_configured()
+
     if status == 'approved':
         return send_ngo_approval_email(email, organization_name or '')
 
@@ -78,7 +80,6 @@ def send_ngo_approval_email(ngo_email, organization_name):
         f"Hello,\n\n"
         f"Great news! Your NGO '{organization_name}' has been approved by the admin.\n"
         f"You can now log in and use the Dodonation app.\n\n"
-        f"Log in at: [APP_URL]\n"
         f"Username: {ngo_email}\n\n"
         f"Thank you,\nThe Dodonation Team"
     )
@@ -92,9 +93,11 @@ def send_ngo_approval_email(ngo_email, organization_name):
             fail_silently=False,
         )
         return True
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to send NGO approval email to %s", ngo_email)
-        return False
+        raise EmailDeliveryError(
+            "Failed to deliver NGO approval email. Check SMTP settings and recipient address."
+        ) from exc
 
 
 def send_ngo_rejection_email(ngo_email, organization_name, rejection_reason):
@@ -117,9 +120,11 @@ def send_ngo_rejection_email(ngo_email, organization_name, rejection_reason):
             fail_silently=False,
         )
         return True
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to send NGO rejection email to %s", ngo_email)
-        return False
+        raise EmailDeliveryError(
+            "Failed to deliver NGO rejection email. Check SMTP settings and recipient address."
+        ) from exc
 
 
 def send_donation_claimed_email(donor_email, donation_title, ngo_name):

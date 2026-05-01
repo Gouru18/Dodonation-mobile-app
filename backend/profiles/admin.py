@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from accounts.models import User
+from core.email_utils import send_ngo_status_email
 from .models import DonorProfile, NGOProfile, NGOPermitApplication
 
 @admin.register(DonorProfile)
@@ -63,3 +64,25 @@ class NGOPermitApplicationAdmin(admin.ModelAdmin):
             return format_html('<a href="{}" target="_blank">Open uploaded permit</a>', obj.permit_file.url)
         return 'No file uploaded'
     permit_file_link.short_description = 'Permit file'
+
+    def save_model(self, request, obj, form, change):
+        previous_status = None
+        if change and obj.pk:
+            try:
+                previous_status = NGOPermitApplication.objects.get(pk=obj.pk).status
+            except NGOPermitApplication.DoesNotExist:
+                previous_status = None
+
+        super().save_model(request, obj, form, change)
+
+        if change and previous_status != obj.status and obj.status in {'approved', 'rejected'}:
+            if obj.status == 'approved' and not obj.ngo.user.is_active:
+                obj.ngo.user.is_active = True
+                obj.ngo.user.save(update_fields=['is_active'])
+
+            send_ngo_status_email(
+                obj.ngo.user.email,
+                obj.status,
+                obj.ngo.organization_name,
+                obj.rejection_reason,
+            )

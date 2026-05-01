@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 
+from core.email_utils import send_ngo_status_email
 from .models import DonorProfile, NGOProfile, NGOPermitApplication
 from .serializers import (
     DonorProfileSerializer, NGOProfileSerializer, 
@@ -82,7 +83,11 @@ class NGOPermitApprovalView(generics.UpdateAPIView):
             permit.ngo.user.is_active = True
             permit.ngo.user.save()
             
-            # TODO: Send approval email to NGO
+            send_ngo_status_email(
+                permit.ngo.user.email,
+                'approved',
+                permit.ngo.organization_name,
+            )
             return Response(
                 {'message': 'Permit approved. NGO user activated.'},
                 status=status.HTTP_200_OK
@@ -95,7 +100,12 @@ class NGOPermitApprovalView(generics.UpdateAPIView):
             permit.rejection_reason = request.data.get('rejection_reason', '')
             permit.save()
             
-            # TODO: Send rejection email to NGO
+            send_ngo_status_email(
+                permit.ngo.user.email,
+                'rejected',
+                permit.ngo.organization_name,
+                permit.rejection_reason,
+            )
             return Response(
                 {'message': 'Permit rejected.'},
                 status=status.HTTP_200_OK
