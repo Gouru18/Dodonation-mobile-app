@@ -6,6 +6,7 @@ from core.forms import ReviewForm, ReportForm, DonationForm
 from django.db.models import Sum
 from users.decorators import login_required_home
 from ngo.models import NGOProfile
+from django.http import JsonResponse
 
 def donation_list(request):
     query = request.GET.get('q', '')
@@ -33,7 +34,9 @@ def donation_list(request):
             ClaimRequest.objects.create(donation=donation, receiver=receiver, status='pending')
             messages.success(request, "You have successfully requested this donation!")
 
-        return redirect('donation_list')
+        return JsonResponse({"success": False, "message": "You already requested this donation."}, status=400)
+
+    #return redirect('donation_list')
 
     return render(request, 'core/donation_list.html', {
         'donations': donations,
@@ -41,6 +44,23 @@ def donation_list(request):
         'category': category,
         'status': status,
     })
+
+def claim_donation(request):
+    if request.method == 'POST':
+        if not request.user.is_authenticated or not hasattr(request.user, 'ngo_profile'):
+            return JsonResponse({"success": False, "message": "You must be logged in as an NGO to claim a donation."}, status=403)
+
+        donation_id = request.POST.get('donation_id')
+        donation = get_object_or_404(Donation, id=donation_id)
+        receiver = request.user.ngo_profile
+
+        if not ClaimRequest.objects.filter(donation=donation, receiver=receiver).exists():
+            ClaimRequest.objects.create(donation=donation, receiver=receiver, status='pending')
+            return JsonResponse({"success": True, "message": "You have successfully requested this donation!"})
+
+        return JsonResponse({"success": False, "message": "You already requested this donation."}, status=400)
+
+    return JsonResponse({"success": False, "message": "Invalid request method."}, status=405)
 
 @login_required_home
 def leave_review(request):

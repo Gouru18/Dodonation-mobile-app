@@ -35,13 +35,14 @@ class DonationSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'date_created', 
             'donor', 'donor_username', 'image'
         ]
+
 class ClaimRequestSerializer(serializers.ModelSerializer):
     donation_title = serializers.CharField(source='donation.title', read_only=True)
     receiver_name = serializers.CharField(source='receiver.user.username', read_only=True)
 
     class Meta:
         model = ClaimRequest
-        fields = ['id', 'donation_title', 'receiver_name', 'status', 'date_requested']
+        fields = ['id', 'donation', 'donation_title', 'receiver', 'receiver_name', 'status', 'date_requested']
 
 class GeneralReviewSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
@@ -62,13 +63,31 @@ class NGOProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NGOProfile
-        fields = ['id', 'user_username', 'name', 'description', 'contact_email']
+        fields = ['receiverID', 'user_username', 'name', 'reg_number']
 
 class DonorProfileSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
+    user_username = serializers.CharField(source='user.username', required=False)
+    user_email = serializers.CharField(source='user.email', required=False)
+    user_phone_no = serializers.CharField(source='user.phone_no', required=False)
 
     class Meta:
         model = DonorProfile
-        fields = ['id', 'user_username', 'name', 'description', 'contact_email']
+        fields = ['user_username', 'user_email', 'user_phone_no']
+
+    def update(self, instance, validated_data):
+        # Extract and update user fields
+        if 'user' in validated_data:
+            user_data = validated_data.pop('user')
+            user = instance.user
+            for attr, value in user_data.items():
+                setattr(user, attr, value)
+            user.save()
+        
+        # Update DonorProfile fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        return instance
 
 

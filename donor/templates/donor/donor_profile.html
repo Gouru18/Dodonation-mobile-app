@@ -7,12 +7,14 @@
     <!-- Profile Section -->
     <div class="form-wrapper" style="margin-bottom: 2rem;">
         <h3 style="color: var(--dark-green); margin-bottom: 1rem;">Edit Profile</h3>
-        <form method="POST">
+        <form id="update-profile-form" method="POST">
             {% csrf_token %}
+            <input type="hidden" id="donor-profile-id" value="{{ user.donor_profile.donorID }}">
             <h4>Account</h4>
             {{ user_form.as_p }}
             {{ profile_form.as_p }}
-            <button type="submit" name="update_profile" class="btn btn-success">Update Profile</button>
+            <button type="button" id="update-profile-btn" class="btn btn-success">Update Profile</button>
+            <div id="profile-message" style="margin-top: 1rem;"></div>
         </form>
     </div>
 
@@ -188,4 +190,66 @@
         {% endfor %}
     </div>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#update-profile-btn').on('click', function(e) {
+        e.preventDefault();
+        
+        const donorProfileId = $('#donor-profile-id').val();
+        const $messageDiv = $('#profile-message');
+        
+        // Collect form data
+        const formData = new FormData(document.getElementById('update-profile-form'));
+        
+        // Map form fields to API field names
+        const updateData = {
+            user_username: formData.get('username') || '',
+            user_email: formData.get('email') || '',
+            user_phone_no: formData.get('phone_no') || ''
+        };
+        
+        // Remove empty fields
+        Object.keys(updateData).forEach(key => {
+            if (!updateData[key]) delete updateData[key];
+        });
+        
+        if (Object.keys(updateData).length === 0) {
+            $messageDiv.html(`<p style="color: orange; font-weight: bold;">⚠ No changes to save.</p>`);
+            return;
+        }
+        
+        $.ajax({
+            url: `/api/donor/profile/${donorProfileId}/`,
+            type: 'PATCH',
+            data: JSON.stringify(updateData),
+            contentType: 'application/json',
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: function(response) {
+                $messageDiv.html(`<p style="color: green; font-weight: bold;">✓ Profile updated successfully!</p>`);
+                setTimeout(function() {
+                    $messageDiv.fadeOut(2000, function() {
+                        $(this).html('').show();
+                    });
+                }, 1500);
+            },
+            error: function(xhr) {
+                let errorMsg = 'Failed to update profile.';
+                if (xhr.responseJSON) {
+                    if (xhr.responseJSON.error) {
+                        errorMsg = xhr.responseJSON.error;
+                    } else if (typeof xhr.responseJSON === 'object') {
+                        // Handle field errors
+                        errorMsg = Object.values(xhr.responseJSON).flat().join(' ');
+                    }
+                }
+                $messageDiv.html(`<p style="color: red; font-weight: bold;">✗ ${errorMsg}</p>`);
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

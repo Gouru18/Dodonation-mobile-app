@@ -87,7 +87,7 @@ $(document).ready(function() {
 
         $.ajax({
             url: `/api/core/claim-requests/${requestId}/`, 
-type: 'PATCH',
+            type: 'PATCH',
             data: JSON.stringify({
                 request_id: requestId,
                 status: newStatus
