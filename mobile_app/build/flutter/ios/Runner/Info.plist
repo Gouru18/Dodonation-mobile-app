@@ -51,6 +51,8 @@
 			<true/>
 		</dict>
 		<!-- flet: deep linking  -->
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Dodonation uses your location only when you choose to pin or use a meeting handoff point.</string>
 		<key>UIStatusBarHidden</key>
 		<false/>
 	</dict>
