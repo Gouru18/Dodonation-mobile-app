@@ -180,6 +180,7 @@ $(document).ready(function() {
             contentType: 'application/json',
             headers: { "X-CSRFToken": "{{ csrf_token }}" },
             success: function() {
+                alert("Donation request submitted successfully!");
                 loadDonations();
             },
             error: function(xhr) {

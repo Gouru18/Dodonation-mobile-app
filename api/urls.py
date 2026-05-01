@@ -33,11 +33,9 @@ urlpatterns = [
     # General review endpoints
     path('core/general-reviews/', views.get_general_reviews, name='general-reviews-list'), #ok
     path('core/general-reviews/create/', views.create_general_review, name='create-general-review'), #ok
-    path('core/general-reviews/<int:pk>/', views.general_review_detail, name='general-review-detail'),
     
     # Report endpoints
-    path('core/reports/', views.get_reports, name='reports-list'),
+    path('core/reports/', views.get_reports, name='reports-list'), #check
     path('core/reports/create/', views.create_report, name='create-report'), #ok
-    path('core/reports/<int:pk>/', views.report_detail, name='report-detail'),
 ]
 

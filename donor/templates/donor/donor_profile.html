@@ -229,7 +229,7 @@ $(document).ready(function() {
                 'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
             },
             success: function(response) {
-                $messageDiv.html(`<p style="color: green; font-weight: bold;">✓ Profile updated successfully!</p>`);
+                $messageDiv.html(`<p style="color: green; font-weight: bold;">Profile updated successfully!</p>`);
                 setTimeout(function() {
                     $messageDiv.fadeOut(2000, function() {
                         $(this).html('').show();
@@ -246,7 +246,7 @@ $(document).ready(function() {
                         errorMsg = Object.values(xhr.responseJSON).flat().join(' ');
                     }
                 }
-                $messageDiv.html(`<p style="color: red; font-weight: bold;">✗ ${errorMsg}</p>`);
+                $messageDiv.html(`<p style="color: red; font-weight: bold;">${errorMsg}</p>`);
             }
         });
     });

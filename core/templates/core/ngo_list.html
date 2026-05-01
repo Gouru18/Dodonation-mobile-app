@@ -63,10 +63,9 @@ $(document).ready(function() {
                 }
 
                 data.forEach(function(ngo) {
-
                     let ngoHtml = `
                         <li>
-                            <a href="/ngo/profile/${ngo.id}/">${ngo.name}</a>
+                            <a href="/ngo/profile/${ngo.receiverID}/">${ngo.name}</a>
                         </li>
                     `;
                     container.append(ngoHtml);

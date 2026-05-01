@@ -72,7 +72,7 @@ class DonorProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DonorProfile
-        fields = ['user_username', 'user_email', 'user_phone_no']
+        fields = ['donorID','user_username', 'user_email', 'user_phone_no']
 
     def update(self, instance, validated_data):
         # Extract and update user fields

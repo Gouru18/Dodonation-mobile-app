@@ -6,26 +6,31 @@
     <div style="width: 100%; max-width: 500px; padding: 2rem; background-color: var(--cream); border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
         <h2 style="text-align: center; color: var(--dark-green); margin-bottom: 1.5rem;">Edit Donation</h2>
 
-        <form id="edit-donation-form" enctype="multipart/form-data">
+        <form method="POST" enctype="multipart/form-data">
             {% csrf_token %}
             {% for field in form %}
                 <div style="margin-bottom: 1rem;">
                     {{ field.label_tag }}
                     {{ field }}
-                    <div id="error-{{ field.name }}" style="color: red; font-size: 0.9rem;"></div>
+                    {% if field.errors %}
+                        <div style="color: red; font-size: 0.9rem;">{{ field.errors|striptags }}</div>
+                    {% endif %}
                 </div>
             {% endfor %}
 
             <div style="text-align: center; margin-top: 1.5rem;">
                 <button type="submit" class="btn btn-success">Save Changes</button>
-                <p id="status-message" style="margin-top: 10px; font-weight: bold;"></p>
             </div>
         </form>
     </div>
 </div>
 
 <style>
-    input[type="text"], input[type="number"], input[type="date"], textarea, select {
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    textarea,
+    select {
         width: 100%;
         padding: 10px;
         border: 1px solid #ccc;
@@ -35,58 +40,17 @@
         font-family: inherit;
         background-color: white;
     }
-    textarea { min-height: 100px; resize: vertical; }
-    label { display: block; margin-bottom: 0.3rem; font-weight: bold; color: var(--dark-green); }
+
+    textarea {
+        min-height: 100px;
+        resize: vertical;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 0.3rem;
+        font-weight: bold;
+        color: var(--dark-green);
+    }
 </style>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-$(document).ready(function() {
-    //Form Submission
-    $('#edit-donation-form').on('submit', function(e) {
-        e.preventDefault(); // Stop page reload
-
-        // Capturing the Data (JSON Production)
-        // We get the ID from the URL 
-        const pathArray = window.location.pathname.split('/');
-        const donationId = pathArray[pathArray.length - 2]; 
-
-        // Building the data object to be converted to JSON
-        let formData = {
-            title: $('#id_title').val(),
-            description: $('#id_description').val(),
-            quantity: $('#id_quantity').val(),
-            expiry_date: $('#id_expiry_date').val(),
-            status: $('#id_status').val()
-        };
-
-        $('#status-message').text("Saving...").css("color", "orange");
-
-        // 4. AJAX Call 
-        $.ajax({
-            url: `/core/donations/${donationId}/`, // DRF Detail Endpoint
-            type: 'PATCH', // Partial update
-            data: JSON.stringify(formData),
-            contentType: 'application/json',
-            headers: { "X-CSRFToken": "{{ csrf_token }}" },
-            success: function(response) {
-                //Displaying Data 
-                $('#status-message').text("Changes saved successfully!").css("color", "green");
-                console.log("Updated Data:", response);
-            },
-            error: function(xhr) {
-                $('#status-message').text("Error updating donation.").css("color", "red");
-                
-                // If API returns validation errors, show them under fields
-                if (xhr.status === 400) {
-                    let errors = xhr.responseJSON;
-                    for (let key in errors) {
-                        $(`#error-${key}`).text(errors[key][0]);
-                    }
-                }
-            }
-        });
-    });
-});
-</script>
 {% endblock %}
