@@ -5,6 +5,8 @@ Team members:
 -  Poshita Beersee (2413580)
 -  Gouruchana Devi Maghoo (2413925)
 
+JQuery and api added for the website on branch: Web_Application
+
 For the Dodonation mobile app:
 1.User Roles:
 Donor:
