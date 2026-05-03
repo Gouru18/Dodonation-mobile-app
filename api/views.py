@@ -3,26 +3,15 @@ from rest_framework.decorators import api_view, permission_classes
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
-from core.models import Donation
-from core.models import ClaimRequest
-from core.models import GeneralReview
-from core.models import Report
-
-from .serializers import DonationSerializer
-from .serializers import ClaimRequestSerializer
-from .serializers import GeneralReviewSerializer
-from .serializers import ReportSerializer
-from .permissions import IsNGO, IsDonor, IsLoggedIn
-
+from core.models import Donation, ClaimRequest, GeneralReview, Report
 from users.models import User
 from ngo.models import NGOProfile
 from donor.models import DonorProfile
 
-from .serializers import UserSerializer
-from .serializers import NGOProfileSerializer
-from .serializers import DonorProfileSerializer
+from .serializers import UserSerializer, NGOProfileSerializer, DonorProfileSerializer, NGOSignupSerializer, DonorSignupSerializer
+from .serializers import DonationSerializer, ClaimRequestSerializer, GeneralReviewSerializer, ReportSerializer
+from .permissions import IsNGO, IsDonor, IsLoggedIn
 
-#from users.decorators import login_ngo, login_donor, login_required_home
 
 @api_view(['GET'])
 def test(request, format=None):
@@ -41,7 +30,7 @@ def login(request, format=None):
     return response.Response({'error': 'Invalid credentials'}, status=400)
 
 @api_view(['POST'])
-def selct_role(request, format=None):
+def select_role(request, format=None):
     role = request.data.get('role')
     if role in ['donor', 'ngo']:
         return response.Response({'message': f'Role {role} selected'})
@@ -49,26 +38,71 @@ def selct_role(request, format=None):
 
 @api_view(['POST'])
 def create_ngo_profile(request, format=None):
-    serializer = NGOProfileSerializer(data=request.data)
+    serializer = NGOSignupSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
-        return response.Response(serializer.data, status=201)
+        ngo_profile = serializer.save()
+        # Return the created profile with user info
+        profile_serializer = NGOProfileSerializer(ngo_profile)
+        return response.Response(profile_serializer.data, status=201)
     return response.Response(serializer.errors, status=400)
 
-@api_view(['POST'])
-def create_donor_profile(request, format=None):
-    serializer = DonorProfileSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return response.Response(serializer.data, status=201)
-    return response.Response(serializer.errors, status=400)
 
 @api_view(['GET'])
-@permission_classes([IsLoggedIn])
 def get_ngo_profiles(request, format=None):
     ngos = NGOProfile.objects.all()
     serializer = NGOProfileSerializer(ngos, many=True)
     return response.Response(serializer.data)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+def ngo_profile_detail(request, pk):
+    ngo_profile = get_object_or_404(NGOProfile, pk=pk)
+    
+    if request.method == 'GET':
+        # Allow anyone to view NGO profiles
+        serializer = NGOProfileSerializer(ngo_profile)
+        return response.Response(serializer.data)
+    
+    if request.method in ['PATCH', 'DELETE']:
+        # Only allow the NGO user to modify their own profile
+        if not request.user or not request.user.is_authenticated:
+            return response.Response(
+                {'error': 'Authentication required'}, 
+                status=401
+            )
+        
+        if request.user.role != 'ngo':
+            return response.Response(
+                {'error': 'Only NGOs can modify NGO profiles'}, 
+                status=403
+            )
+        
+        if ngo_profile.user != request.user:
+            return response.Response(
+                {'error': 'You can only modify your own profile'}, 
+                status=403
+            )
+        
+        if request.method == 'PATCH':
+            serializer = NGOProfileSerializer(ngo_profile, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return response.Response(serializer.data)
+            return response.Response(serializer.errors, status=400)
+        
+        elif request.method == 'DELETE':
+            ngo_profile.delete()
+            return response.Response({'message': 'NGO profile deleted successfully'}, status=204)
+
+@api_view(['POST'])
+def create_donor_profile(request, format=None):
+    serializer = DonorSignupSerializer(data=request.data)
+    if serializer.is_valid():
+        donor_profile = serializer.save()
+        # Return the created profile with user info
+        profile_serializer = DonorProfileSerializer(donor_profile)
+        return response.Response(profile_serializer.data, status=201)
+    return response.Response(serializer.errors, status=400)
 
 @api_view(['GET'])
 @permission_classes([IsDonor])
@@ -76,6 +110,55 @@ def get_donor_profiles(request, format=None):
     donors = DonorProfile.objects.all()
     serializer = DonorProfileSerializer(donors, many=True)
     return response.Response(serializer.data)
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+def donor_profile_detail(request, pk):
+    donor_profile = get_object_or_404(DonorProfile, pk=pk)
+    
+    if request.method == 'GET':
+        # Allow anyone to view donor profiles
+        serializer = DonorProfileSerializer(donor_profile)
+        return response.Response(serializer.data)
+    
+    if request.method in ['PATCH', 'DELETE']:
+        # Only allow the Donor user to modify their own profile
+        if not request.user or not request.user.is_authenticated:
+            return response.Response(
+                {'error': 'Authentication required'}, 
+                status=401
+            )
+        
+        if request.user.role != 'donor':
+            return response.Response(
+                {'error': 'Only donors can modify donor profiles'}, 
+                status=403
+            )
+        
+        if donor_profile.user != request.user:
+            return response.Response(
+                {'error': 'You can only modify your own profile'}, 
+                status=403
+            )
+        
+        if request.method == 'PATCH':
+            serializer = DonorProfileSerializer(donor_profile, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return response.Response(serializer.data)
+            return response.Response(serializer.errors, status=400)
+        
+        elif request.method == 'DELETE':
+            donor_profile.delete()
+            return response.Response({'message': 'Donor profile deleted successfully'}, status=204)
+            if serializer.is_valid():
+                serializer.save()
+                return response.Response(serializer.data)
+            return response.Response(serializer.errors, status=400)
+        
+        elif request.method == 'DELETE':
+            donor_profile.delete()
+            return response.Response({'message': 'Donor profile deleted successfully'}, status=204)
+
 
 
 @api_view(['POST'])
@@ -118,13 +201,16 @@ def get_donations(request, format=None):
 def donation_detail(request, pk):
     donation = get_object_or_404(Donation, pk=pk)
     
+    
     # For GET requests, allow anyone to view
     if request.method == 'GET':
         serializer = DonationSerializer(donation)
         return response.Response(serializer.data)
+
     
     # For PATCH and DELETE, check if user is the donor owner
     if request.method in ['PATCH', 'DELETE']:
+
         if not request.user or not request.user.is_authenticated:
             return response.Response(
                 {'error': 'Authentication required'}, 
@@ -251,96 +337,6 @@ def get_claim_requests(request, format=None):
     
     serializer = ClaimRequestSerializer(claim_requests, many=True)
     return response.Response(serializer.data)
-
-
-@api_view(['GET', 'PATCH', 'DELETE'])
-def ngo_profile_detail(request, pk):
-    ngo_profile = get_object_or_404(NGOProfile, pk=pk)
-    
-    if request.method == 'GET':
-        # Allow anyone to view NGO profiles
-        serializer = NGOProfileSerializer(ngo_profile)
-        return response.Response(serializer.data)
-    
-    if request.method in ['PATCH', 'DELETE']:
-        # Only allow the NGO user to modify their own profile
-        if not request.user or not request.user.is_authenticated:
-            return response.Response(
-                {'error': 'Authentication required'}, 
-                status=401
-            )
-        
-        if request.user.role != 'ngo':
-            return response.Response(
-                {'error': 'Only NGOs can modify NGO profiles'}, 
-                status=403
-            )
-        
-        if ngo_profile.user != request.user:
-            return response.Response(
-                {'error': 'You can only modify your own profile'}, 
-                status=403
-            )
-        
-        if request.method == 'PATCH':
-            serializer = NGOProfileSerializer(ngo_profile, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return response.Response(serializer.data)
-            return response.Response(serializer.errors, status=400)
-        
-        elif request.method == 'DELETE':
-            ngo_profile.delete()
-            return response.Response({'message': 'NGO profile deleted successfully'}, status=204)
-
-
-@api_view(['GET', 'PATCH', 'DELETE'])
-def donor_profile_detail(request, pk):
-    donor_profile = get_object_or_404(DonorProfile, pk=pk)
-    
-    if request.method == 'GET':
-        # Allow anyone to view donor profiles
-        serializer = DonorProfileSerializer(donor_profile)
-        return response.Response(serializer.data)
-    
-    if request.method in ['PATCH', 'DELETE']:
-        # Only allow the Donor user to modify their own profile
-        if not request.user or not request.user.is_authenticated:
-            return response.Response(
-                {'error': 'Authentication required'}, 
-                status=401
-            )
-        
-        if request.user.role != 'donor':
-            return response.Response(
-                {'error': 'Only donors can modify donor profiles'}, 
-                status=403
-            )
-        
-        if donor_profile.user != request.user:
-            return response.Response(
-                {'error': 'You can only modify your own profile'}, 
-                status=403
-            )
-        
-        if request.method == 'PATCH':
-            serializer = DonorProfileSerializer(donor_profile, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return response.Response(serializer.data)
-            return response.Response(serializer.errors, status=400)
-        
-        elif request.method == 'DELETE':
-            donor_profile.delete()
-            return response.Response({'message': 'Donor profile deleted successfully'}, status=204)
-            if serializer.is_valid():
-                serializer.save()
-                return response.Response(serializer.data)
-            return response.Response(serializer.errors, status=400)
-        
-        elif request.method == 'DELETE':
-            donor_profile.delete()
-            return response.Response({'message': 'Donor profile deleted successfully'}, status=204)
 
 
 @api_view(['POST'])

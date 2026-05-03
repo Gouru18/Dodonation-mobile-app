@@ -60,15 +60,17 @@ class ReportSerializer(serializers.ModelSerializer):
 
 class NGOProfileSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    user_phone_no = serializers.CharField(source='user.phone_no', read_only=True)
 
     class Meta:
         model = NGOProfile
-        fields = ['receiverID', 'user_username', 'name', 'reg_number']
+        fields = ['receiverID', 'user_username', 'user_email', 'user_phone_no', 'name', 'reg_number']
 
 class DonorProfileSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', required=False)
-    user_email = serializers.CharField(source='user.email', required=False)
-    user_phone_no = serializers.CharField(source='user.phone_no', required=False)
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    user_phone_no = serializers.CharField(source='user.phone_no', read_only=True)
 
     class Meta:
         model = DonorProfile
@@ -89,5 +91,83 @@ class DonorProfileSerializer(serializers.ModelSerializer):
         instance.save()
         
         return instance
+
+
+class NGOSignupSerializer(serializers.Serializer):
+    """Serializer for NGO signup - creates both User and NGOProfile"""
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    phone_no = serializers.CharField(max_length=8)
+    name = serializers.CharField(max_length=100)
+    reg_number = serializers.CharField(max_length=50)
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists.")
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already exists.")
+        return value
+
+    def validate_name(self, value):
+        if NGOProfile.objects.filter(name=value).exists():
+            raise serializers.ValidationError("NGO name already exists.")
+        return value
+
+    def validate_reg_number(self, value):
+        if NGOProfile.objects.filter(reg_number=value).exists():
+            raise serializers.ValidationError("Registration number already exists.")
+        return value
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+            phone_no=validated_data['phone_no'],
+            role='ngo'
+        )
+        
+        ngo_profile = NGOProfile.objects.create(
+            user=user,
+            name=validated_data['name'],
+            reg_number=validated_data['reg_number']
+        )
+        
+        return ngo_profile
+
+
+class DonorSignupSerializer(serializers.Serializer):
+    """Serializer for Donor signup - creates both User and DonorProfile"""
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    phone_no = serializers.CharField(max_length=8)
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists.")
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already exists.")
+        return value
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+            phone_no=validated_data['phone_no'],
+            role='donor'
+        )
+        
+        donor_profile = DonorProfile.objects.create(user=user)
+        
+        return donor_profile
 
 

@@ -1,7 +1,4 @@
 from rest_framework import permissions
-from ngo.models import NGOProfile
-from donor.models import DonorProfile
-
 
 class IsLoggedIn(permissions.BasePermission):
     """
@@ -23,16 +20,6 @@ class IsNGO(permissions.BasePermission):
         return request.user.role == 'ngo'
 
 
-class IsNGOOrReadOnly(permissions.BasePermission):
-    """
-    Allows NGOs to create/edit objects. Others can only read.
-    """
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return request.user and request.user.is_authenticated and request.user.role == 'ngo'
-
-
 class IsDonor(permissions.BasePermission):
     """
     Allows access only to authenticated Donor users.
@@ -43,11 +30,3 @@ class IsDonor(permissions.BasePermission):
         return request.user.role == 'donor'
 
 
-class IsDonorOrReadOnly(permissions.BasePermission):
-    """
-    Allows Donors to create/edit objects. Others can only read.
-    """
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return request.user and request.user.is_authenticated and request.user.role == 'donor'
